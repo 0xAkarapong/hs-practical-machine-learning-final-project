@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches-ignore: [main]   # any branch except main (PRs cover main); includes develop + all feature forks
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version-file: ".python-version"
+          enable-cache: true
+      - run: uv sync --frozen --group dev
+      - run: uv run ruff check .
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version-file: ".python-version"
+          enable-cache: true
+      - run: uv sync --frozen --group dev
+      - run: uv run ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version-file: ".python-version"
+          enable-cache: true
+      - run: uv sync --frozen --group dev
+      - run: uv run pytest
+      - name: Execute notebooks (smoke test)
+        run: uv run jupyter nbconvert --to notebook --execute --output-dir=/tmp/nbexec --ExecutePreprocessor.timeout=300 notebooks/*.ipynb
