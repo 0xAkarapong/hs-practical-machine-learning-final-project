@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual envs
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated figures from notebooks
+notebooks/figures/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
