@@ -11,3 +11,20 @@ dependencies = [
     "pandas>=3.0.3",
     "seaborn>=0.13.2",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.21",
+    "pytest>=8.0.0",
+]
+
+[tool.ruff]
+line-length = 88
+include = ["*.py", "*.pyi"]   # notebooks are exploration artifacts; lint/format .py only
+target-version = "py313"   # ponytail: py313 not py314 — ruff has no py314 target yet; upgrade when released
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
