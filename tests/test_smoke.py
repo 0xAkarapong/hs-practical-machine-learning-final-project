@@ -2,4 +2,5 @@ from pathlib import Path
 
 
 def test_main_exists():
-    assert Path("main.py").exists()
+    root_dir = Path(__file__).resolve().parent.parent
+    assert (root_dir / "main.py").exists()
