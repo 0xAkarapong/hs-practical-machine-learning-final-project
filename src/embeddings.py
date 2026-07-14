@@ -22,7 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"
 EMBEDDING_CACHE_PATH = MODELS_DIR / "name_embeddings.joblib"
 
-MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"
 EMBEDDING_DIM = 32
 # ponytail: cap distinct name-sets cached to avoid unbounded growth. The common
 # case is one name-set (the no_outliers file) shared by training and prediction.
@@ -45,7 +45,9 @@ def _cached_raw_embeddings(
     — the dominant cost. Capped at EMBEDDING_CACHE_CAP distinct name-sets (oldest
     evicted first via dict insertion order).
     """
-    key = _names_key(names)
+    # ponytail: include model_name in the cache key so swapping encoders (e.g.
+    # MiniLM → mpnet) re-encodes instead of silently reusing the stale raw vectors.
+    key = f"{model_name}:{_names_key(names)}"
     cache: dict = {}
     if EMBEDDING_CACHE_PATH.exists():
         try:

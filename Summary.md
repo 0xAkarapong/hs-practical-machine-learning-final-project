@@ -4,7 +4,7 @@
 
 The end-to-end pipeline now runs in `main.py` as:
 
-1. **Feature engineering** — build the modeling table from `health_and_wellness_no_outliers.csv`. Product `Name` is now represented by both the old text statistics (`name_length`, `name_word_count`) and 16 PCA-compressed sentence embeddings (`name_semantic_pca_*`) from `paraphrase-multilingual-MiniLM-L12-v2`.
+1. **Feature engineering** — build the modeling table from `health_and_wellness_no_outliers.csv`. Product `Name` is now represented by both the old text statistics (`name_length`, `name_word_count`) and 32 PCA-compressed sentence embeddings (`name_semantic_pca_*`) from `paraphrase-multilingual-mpnet-base-v2`.
 2. **Split** — stratified train/test split on `log_price_thb` (80/20, seed 42).
 3. **Baseline** — `DummyRegressor(strategy="mean")` as a sanity-check reference.
 4. **Feature selection** — `RFECV` wrapper using `RidgeCV` to drop low-value features.
@@ -23,8 +23,8 @@ The end-to-end pipeline now runs in `main.py` as:
 | Step | Model | Features | R² (log) | RMSE (log) | MAE (log) | RMSE (THB) | MAE (THB) |
 |---|---|---:|---:|---:|---:|---:|---:|
 | Baseline | Mean predictor | — | −0.0001 | 0.9727 | 0.7766 | 638.08 | 348.71 |
-| Selected GBDT | GradientBoostingRegressor | 66 | 0.2699 | 0.8311 | 0.6449 | 581.33 | 305.63 |
-| Selected XGBoost | XGBRegressor | **66** | **0.2784** | **0.8262** | **0.6403** | **578.04** | **303.88** |
+| Selected GBDT | GradientBoostingRegressor | 73 | 0.2884 | 0.8205 | 0.6453 | 577.34 | 305.22 |
+| Selected XGBoost | XGBRegressor | **73** | **0.2994** | **0.8141** | **0.6363** | **577.78** | **301.77** |
 
 With the sentence-embedding features, **XGBoost now beats sklearn GradientBoostingRegressor** on the same selected subset. Both models improve substantially over the non-embedding region-level model.
 
@@ -48,16 +48,14 @@ On the selected 39 region-level features (no embeddings), sklearn GradientBoosti
 
 ## What the wrapper cut
 
-With the region + embedding encoding, `RFECV` kept **66 of 70** features. The four dropped features were:
+With the region + embedding encoding, `RFECV` kept **73 of 75** features. The two dropped features were:
 
 | Dropped feature | Why it was likely cut |
 |---|---|
 | `has_reviews` | Review presence adds almost no price signal once `name_semantic_pca_*` and `name_word_count` are available. |
 | `log_total_reviews` | Number of reviews is not a strong price predictor in this dataset. |
-| `name_length` | Title character count is redundant with `name_word_count` and weaker than the semantic embeddings. |
-| `shop_region_central` | The Central region one-hot carries less signal than other regions; the remaining region columns are enough. |
 
-In short, the wrapper removed the review group, the weaker of the two title-length statistics, and the lowest-signal region column.
+In short, with the stronger mpnet embeddings the wrapper keeps the title-length and region columns and drops only the review group.
 
 ## Does `Shop Location` matter?
 
@@ -102,7 +100,7 @@ Two plots are produced:
 `name_semantic_pca_*` is the **meaning of the product name compressed into 32 numbers**.
 
 - **name** = the product `Name` column (e.g. `"วิตามินซี 1000mg บำรุงผิว ของแท้"`).
-- **semantic** = the *meaning* of the title, not just how long it is. We use `sentence-transformers` (`paraphrase-multilingual-MiniLM-L12-v2`) to read the Thai/English text and turn it into a 384-number vector that captures concepts like "vitamin", "premium", "imported", "herbal", etc.
+- **semantic** = the *meaning* of the title, not just how long it is. We use `sentence-transformers` (`paraphrase-multilingual-mpnet-base-v2`) to read the Thai/English text and turn it into a 768-number vector that captures concepts like "vitamin", "premium", "imported", "herbal", etc.
 - **PCA** = we then compress those 384 numbers down to 32 components so the tree model can handle them.
 
 PCA components do **not** get human-readable labels like "premiumness". They are just ordered directions of variance: `pca_00` is the broadest direction, `pca_04` is the 5th direction, etc. The model happens to find `pca_04` most useful for predicting price, but that direction may combine several real-world concepts at once.
@@ -187,16 +185,16 @@ uv run python main.py   # train + evaluate + interpret + compare
 uv run python predict.py # generate predictions.csv from the raw table
 ```
 
-Final model: **name-embedding + region-level XGBRegressor** on 66 selected features.
+Final model: **name-embedding + region-level XGBRegressor** on 73 selected features.
 
 | Metric | Value |
 |---|---:|
-| R² (log) | 0.2784 |
-| RMSE (log) | 0.8262 |
-| MAE (log) | 0.6403 |
-| RMSE (THB) | 578.04 |
-| MAE (THB) | 303.88 |
-| CV R² (log) | 0.2630 ± 0.0220 |
+| R² (log) | 0.2994 |
+| RMSE (log) | 0.8141 |
+| MAE (log) | 0.6363 |
+| RMSE (THB) | 577.78 |
+| MAE (THB) | 301.77 |
+| CV R² (log) | 0.2676 ± 0.0310 |
 
 Prediction script: `predict.py` loads `models/xgboost.joblib` and `models/name_pca.joblib`, transforms a raw listing (`Name`, `Section`, `Shop Location`, `Total Reviews`) the same way as training, and returns predicted THB prices in `dataset/predictions.csv`.
 
@@ -226,19 +224,22 @@ tuning capability with `uv run python -m src.tune`; results are written to `mode
 
 | Candidate | Held R² (log) | Held RMSE (THB) | CV R² (log) |
 |---|---:|---:|---:|
-| Current XGBoost (deployed) | 0.2784 | 578.04 | 0.2630 ± 0.0220 |
-| Tuned XGBoost | 0.3381 | 544.51 | 0.3153 ± 0.0270 |
-| Tuned GBDT | 0.3382 | 550.84 | 0.3034 ± 0.0233 |
-| HistGradientBoosting | 0.3366 | 544.88 | 0.3016 ± 0.0206 |
-| RandomForest | **0.3413** | 558.58 | 0.3039 ± 0.0201 |
+| Current XGBoost (deployed) | 0.2994 | 577.78 | 0.2676 ± 0.0310 |
+| Tuned XGBoost | **0.3949** | 548.77 | 0.3450 ± 0.0402 |
+| Tuned GBDT | 0.3679 | 550.23 | 0.3165 ± 0.0474 |
+| HistGradientBoosting | 0.3488 | 551.29 | 0.3349 ± 0.0464 |
+| RandomForest | 0.3635 | 559.79 | 0.3192 ± 0.0317 |
 
-All four tuned candidates are **clear winners** over the deployed XGBoost (each ΔR² ≥ +0.058),
-with 32-dim embeddings lifting every candidate vs the prior 16-dim run (e.g. RandomForest
-0.3186 → 0.3413). RandomForest stays the **clear top candidate** on held-out R² (ΔR² +0.063 vs
-deployed) yet is **not** auto-promoted. To promote: `cp models/tuned_rf.joblib models/xgboost.joblib`
-and re-run `predict.py` (selected-features list and PCA are unchanged within this run). Note the
-`n_jobs=1` ceiling makes the RF search the slowest stage (~305s); it is the natural candidate for
-subprocess-isolated parallelism next.
+All four tuned candidates are **clear winners** over the deployed XGBoost (each ΔR² ≥ +0.049).
+Switching the encoder to `paraphrase-multilingual-mpnet-base-v2` (768-dim raw, multilingual
+incl. Thai) lifted every model vs the prior MiniLM run — the deployed XGBoost went
+0.2784 → 0.2994 and the best candidate 0.3381 → 0.3949. With mpnet, **tuned XGBoost is now the
+top candidate** on held-out R² (ΔR² +0.096 vs deployed) — note its held-out (0.3949) runs
+above its CV mean (0.3450±0.0402), so some held-out optimism; RandomForest is a close second
+with a tighter CV spread (0.3192 ± 0.0317). Neither is auto-promoted. To promote:
+`cp models/tuned_xgboost.joblib models/xgboost.joblib` and re-run `predict.py` (selected-features
+list and PCA are unchanged within this run). The `n_jobs=1` ceiling makes the RF search the
+slowest stage (~360s); it is the natural candidate for subprocess-isolated parallelism next.
 
 ## What drives the price
 
@@ -249,9 +250,11 @@ subprocess-isolated parallelism next.
 
 ## Next steps (not done)
 
-- Promote the tuned RandomForest (`models/tuned_rf.joblib`, held R² 0.3413) over the deployed model
+- Promote the tuned XGBoost (`models/tuned_xgboost.joblib`, held R² 0.3949) over the deployed model
   once the uplift is confirmed on fresh data — capability exists, swap is opt-in (see Performance work).
-- Try a Thai-specific sentence encoder (`EMBEDDING_DIM` is now 32; a different encoder would need a
-  fresh embedding cache).
+  RandomForest (`held R² 0.3635`, tighter CV) is a more conservative alternative.
+- Try a Thai-specific sentence encoder (mpnet is multilingual but not Thai-trained; a Thai SBERT
+  model may capture local phrasing better — a different encoder auto-invalidates the embedding cache).
+- Add text-derived features (dosage/quantity, brand, keyword flags like ของแท้/premium) the embeddings miss.
 - Reclaim joblib parallelism for the tuning search via subprocess isolation (the `n_jobs=1` ceiling
   is deliberate — avoids the torch/joblib segfault on macOS; see `src/embeddings.py`).
