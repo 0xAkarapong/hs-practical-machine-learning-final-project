@@ -1,5 +1,6 @@
 """Train a GradientBoostingRegressor on the health & wellness price splits."""
 
+import json
 from pathlib import Path
 
 import joblib
@@ -14,6 +15,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from src.baseline import train_baseline
+from src.feature_selection import select_features
 from src.split_data import RANDOM_STATE, TARGET_COLUMN, TEST_PATH, TRAIN_PATH
 
 Regressor = GradientBoostingRegressor | DummyRegressor
@@ -21,6 +23,7 @@ Regressor = GradientBoostingRegressor | DummyRegressor
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"
 MODEL_PATH = MODELS_DIR / "gradient_boosting.joblib"
+SELECTED_FEATURES_PATH = MODELS_DIR / "selected_features.json"
 FIGURES_DIR = PROJECT_ROOT / "notebooks" / "figures"
 FIGURE_PATH = FIGURES_DIR / "predicted_vs_actual.png"
 
@@ -83,6 +86,7 @@ def plot_result(
     y_pred: np.ndarray,
     metrics: dict[str, float],
     save_path: Path,
+    selected_count: int | None = None,
 ) -> Path:
     """Save a predicted-vs-actual scatter with a y=x reference diagonal.
 
@@ -110,8 +114,9 @@ def plot_result(
     ax.set_aspect("equal")
     ax.set_xlabel("Actual log_price_thb", color=INK_SECONDARY)
     ax.set_ylabel("Predicted log_price_thb", color=INK_SECONDARY)
+    feature_note = f" ({selected_count} features)" if selected_count else ""
     title = (
-        f"GradientBoostingRegressor — "
+        f"GradientBoostingRegressor{feature_note} — "
         f"R²={metrics['r2_log']:.3f}, RMSE={metrics['rmse_log']:.3f}"
     )
     ax.set_title(title, color=INK_PRIMARY)
@@ -135,7 +140,7 @@ def plot_result(
 
 
 def run_train() -> dict[str, float]:
-    """Load splits, fit baseline + model, evaluate on test, persist the artifact.
+    """Load splits, select features with a wrapper, fit baseline + model, plot.
 
     Prints a log mirroring run_split so the Docker container streams training
     output to stdout. Reports baseline metrics first so the model's gain over
@@ -161,11 +166,23 @@ def run_train() -> dict[str, float]:
         f"  R² (log): {baseline_metrics['r2_log']:.4f}"
     )
 
+    print(f"Selecting features via RFECV wrapper from {X_train.shape[1]} features...")
+    selected_columns = select_features(X_train, y_train)
+    X_train = X_train[selected_columns]
+    X_test = X_test[selected_columns]
+    print(f"Kept:   {len(selected_columns)} features after wrapper selection")
+
+    MODELS_DIR.mkdir(exist_ok=True)
+    SELECTED_FEATURES_PATH.write_text(
+        json.dumps(selected_columns, indent=2), encoding="utf-8"
+    )
+    print(
+        f"Saved:  {SELECTED_FEATURES_PATH.name} → {SELECTED_FEATURES_PATH.parent.name}/"
+    )
+
     print(f"Fitting GradientBoostingRegressor on {X_train.shape[1]} features...")
     model = train_model(X_train, y_train)
     metrics = evaluate_model(model, X_test, y_test)
-
-    MODELS_DIR.mkdir(exist_ok=True)
     joblib.dump(model, MODEL_PATH)
 
     print(f"Saved:  {MODEL_PATH.name} → {MODEL_PATH.parent.name}/")
@@ -182,7 +199,13 @@ def run_train() -> dict[str, float]:
     print(f"R² gain over baseline: {r2_gain:+.4f}")
 
     preds = model.predict(X_test)
-    figure_path = plot_result(y_test, preds, metrics, FIGURE_PATH)
+    figure_path = plot_result(
+        y_test,
+        preds,
+        metrics,
+        FIGURE_PATH,
+        selected_count=len(selected_columns),
+    )
     print(f"Saved:  {figure_path.name} → notebooks/figures/")
     return metrics
 
