@@ -23,8 +23,8 @@ The end-to-end pipeline now runs in `main.py` as:
 | Step | Model | Features | R² (log) | RMSE (log) | MAE (log) | RMSE (THB) | MAE (THB) |
 |---|---|---:|---:|---:|---:|---:|---:|
 | Baseline | Mean predictor | — | −0.0001 | 0.9727 | 0.7766 | 638.08 | 348.71 |
-| Selected GBDT | GradientBoostingRegressor | 55 | 0.2441 | 0.8456 | 0.6680 | 590.20 | 315.96 |
-| Selected XGBoost | XGBRegressor | **55** | **0.2676** | **0.8324** | **0.6502** | **585.47** | **309.94** |
+| Selected GBDT | GradientBoostingRegressor | 66 | 0.2699 | 0.8311 | 0.6449 | 581.33 | 305.63 |
+| Selected XGBoost | XGBRegressor | **66** | **0.2784** | **0.8262** | **0.6403** | **578.04** | **303.88** |
 
 With the sentence-embedding features, **XGBoost now beats sklearn GradientBoostingRegressor** on the same selected subset. Both models improve substantially over the non-embedding region-level model.
 
@@ -48,7 +48,7 @@ On the selected 39 region-level features (no embeddings), sklearn GradientBoosti
 
 ## What the wrapper cut
 
-With the region + embedding encoding, `RFECV` kept **55 of 59** features. The four dropped features were:
+With the region + embedding encoding, `RFECV` kept **66 of 70** features. The four dropped features were:
 
 | Dropped feature | Why it was likely cut |
 |---|---|
@@ -99,11 +99,11 @@ Two plots are produced:
 
 ### What is `name_semantic_pca_*`?
 
-`name_semantic_pca_*` is the **meaning of the product name compressed into 16 numbers**.
+`name_semantic_pca_*` is the **meaning of the product name compressed into 32 numbers**.
 
 - **name** = the product `Name` column (e.g. `"วิตามินซี 1000mg บำรุงผิว ของแท้"`).
 - **semantic** = the *meaning* of the title, not just how long it is. We use `sentence-transformers` (`paraphrase-multilingual-MiniLM-L12-v2`) to read the Thai/English text and turn it into a 384-number vector that captures concepts like "vitamin", "premium", "imported", "herbal", etc.
-- **PCA** = we then compress those 384 numbers down to 16 components so the tree model can handle them.
+- **PCA** = we then compress those 384 numbers down to 32 components so the tree model can handle them.
 
 PCA components do **not** get human-readable labels like "premiumness". They are just ordered directions of variance: `pca_00` is the broadest direction, `pca_04` is the 5th direction, etc. The model happens to find `pca_04` most useful for predicting price, but that direction may combine several real-world concepts at once.
 
@@ -187,16 +187,16 @@ uv run python main.py   # train + evaluate + interpret + compare
 uv run python predict.py # generate predictions.csv from the raw table
 ```
 
-Final model: **name-embedding + region-level XGBRegressor** on 55 selected features.
+Final model: **name-embedding + region-level XGBRegressor** on 66 selected features.
 
 | Metric | Value |
 |---|---:|
-| R² (log) | 0.2673 |
-| RMSE (log) | 0.8326 |
-| MAE (log) | 0.6508 |
-| RMSE (THB) | 582.65 |
-| MAE (THB) | 308.05 |
-| CV R² (log) | 0.2533 ± 0.0154 |
+| R² (log) | 0.2784 |
+| RMSE (log) | 0.8262 |
+| MAE (log) | 0.6403 |
+| RMSE (THB) | 578.04 |
+| MAE (THB) | 303.88 |
+| CV R² (log) | 0.2630 ± 0.0220 |
 
 Prediction script: `predict.py` loads `models/xgboost.joblib` and `models/name_pca.joblib`, transforms a raw listing (`Name`, `Section`, `Shop Location`, `Total Reviews`) the same way as training, and returns predicted THB prices in `dataset/predictions.csv`.
 
@@ -226,18 +226,19 @@ tuning capability with `uv run python -m src.tune`; results are written to `mode
 
 | Candidate | Held R² (log) | Held RMSE (THB) | CV R² (log) |
 |---|---:|---:|---:|
-| Current XGBoost (deployed) | 0.2673 | 582.65 | 0.2533 ± 0.0154 |
-| Tuned XGBoost | 0.3146 | 543.24 | 0.2735 ± 0.0373 |
-| Tuned GBDT | 0.2770 | 563.92 | 0.2652 ± 0.0202 |
-| HistGradientBoosting | 0.2879 | 568.78 | 0.2572 ± 0.0182 |
-| RandomForest | **0.3186** | 557.67 | 0.2864 ± 0.0205 |
+| Current XGBoost (deployed) | 0.2784 | 578.04 | 0.2630 ± 0.0220 |
+| Tuned XGBoost | 0.3381 | 544.51 | 0.3153 ± 0.0270 |
+| Tuned GBDT | 0.3382 | 550.84 | 0.3034 ± 0.0233 |
+| HistGradientBoosting | 0.3366 | 544.88 | 0.3016 ± 0.0206 |
+| RandomForest | **0.3413** | 558.58 | 0.3039 ± 0.0201 |
 
-RandomForest is now the **clear top candidate** — highest held-out R² (ΔR² +0.051 vs deployed)
-and the tightest CV spread (±0.0205) — yet is **not** auto-promoted. To promote:
-`cp models/tuned_rf.joblib models/xgboost.joblib` and re-run `predict.py` (selected-features list
-and PCA are unchanged). Tuned GBDT is marginal; HistGBM and tuned XGBoost are also clear winners
-but slightly behind RandomForest. Note the `n_jobs=1` ceiling makes the RF search the slowest stage
-(~190s); it is the natural candidate for subprocess-isolated parallelism next.
+All four tuned candidates are **clear winners** over the deployed XGBoost (each ΔR² ≥ +0.058),
+with 32-dim embeddings lifting every candidate vs the prior 16-dim run (e.g. RandomForest
+0.3186 → 0.3413). RandomForest stays the **clear top candidate** on held-out R² (ΔR² +0.063 vs
+deployed) yet is **not** auto-promoted. To promote: `cp models/tuned_rf.joblib models/xgboost.joblib`
+and re-run `predict.py` (selected-features list and PCA are unchanged within this run). Note the
+`n_jobs=1` ceiling makes the RF search the slowest stage (~305s); it is the natural candidate for
+subprocess-isolated parallelism next.
 
 ## What drives the price
 
@@ -248,9 +249,9 @@ but slightly behind RandomForest. Note the `n_jobs=1` ceiling makes the RF searc
 
 ## Next steps (not done)
 
-- Promote the tuned RandomForest (`models/tuned_rf.joblib`, held R² 0.3186) over the deployed model
+- Promote the tuned RandomForest (`models/tuned_rf.joblib`, held R² 0.3413) over the deployed model
   once the uplift is confirmed on fresh data — capability exists, swap is opt-in (see Performance work).
-- Experiment with a larger embedding dimension (`EMBEDDING_DIM` is now a parameter; 32-dim is a
-  one-line change) or a Thai-specific sentence encoder.
+- Try a Thai-specific sentence encoder (`EMBEDDING_DIM` is now 32; a different encoder would need a
+  fresh embedding cache).
 - Reclaim joblib parallelism for the tuning search via subprocess isolation (the `n_jobs=1` ceiling
   is deliberate — avoids the torch/joblib segfault on macOS; see `src/embeddings.py`).

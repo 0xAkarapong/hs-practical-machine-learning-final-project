@@ -23,7 +23,7 @@ MODELS_DIR = PROJECT_ROOT / "models"
 EMBEDDING_CACHE_PATH = MODELS_DIR / "name_embeddings.joblib"
 
 MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
-EMBEDDING_DIM = 16
+EMBEDDING_DIM = 32
 # ponytail: cap distinct name-sets cached to avoid unbounded growth. The common
 # case is one name-set (the no_outliers file) shared by training and prediction.
 EMBEDDING_CACHE_CAP = 8
