@@ -11,10 +11,10 @@ import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.feature_selection import RFECV
 from sklearn.linear_model import RidgeCV
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import KFold
 
 from src.feature_engineer import OUTPUT_PATH, build_feature_table
+from src.metrics import evaluate_model
 from src.split_data import RANDOM_STATE, TARGET_COLUMN
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -30,25 +30,6 @@ BLUE = "#2a78d6"
 AQUA = "#1baf7a"
 
 
-def _evaluate(model, X_test, y_test) -> dict[str, float]:
-    preds_log = model.predict(X_test)
-    rmse_log = float(np.sqrt(mean_squared_error(y_test, preds_log)))
-    mae_log = float(mean_absolute_error(y_test, preds_log))
-    r2_log = float(r2_score(y_test, preds_log))
-    y_test_thb = np.expm1(y_test.to_numpy())
-    preds_thb = np.expm1(preds_log)
-    rmse_thb = float(np.sqrt(np.mean((y_test_thb - preds_thb) ** 2)))
-    mae_thb = float(np.mean(np.abs(y_test_thb - preds_thb)))
-    return {
-        "rmse_log": rmse_log,
-        "mae_log": mae_log,
-        "r2_log": r2_log,
-        "rmse_thb": rmse_thb,
-        "mae_thb": mae_thb,
-        "features": X_test.shape[1],
-    }
-
-
 def _select_features(X_train, y_train) -> list[str]:
     cv = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
     selector = RFECV(
@@ -56,7 +37,9 @@ def _select_features(X_train, y_train) -> list[str]:
         min_features_to_select=10,
         cv=cv,
         scoring="neg_mean_squared_error",
-        n_jobs=-1,
+        # ponytail: n_jobs=1 — consistent with the main pipeline's feature_selection.
+        # torch/sentence-transformer threads + joblib parallelism segfault on macOS.
+        n_jobs=1,
     )
     selector.fit(X_train, y_train)
     return X_train.columns[selector.get_support()].tolist()
@@ -82,7 +65,7 @@ def _train_and_eval(feature_table: pd.DataFrame, label: str):
 
     model = GradientBoostingRegressor(random_state=RANDOM_STATE)
     model.fit(X_train, y_train)
-    metrics = _evaluate(model, X_test, y_test)
+    metrics = evaluate_model(model, X_test, y_test, include_features=True)
     print(
         f"{label}: {metrics['features']} features, "
         f"R²={metrics['r2_log']:.4f}, RMSE={metrics['rmse_log']:.4f}, "

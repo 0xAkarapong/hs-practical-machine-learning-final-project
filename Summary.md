@@ -191,13 +191,53 @@ Final model: **name-embedding + region-level XGBRegressor** on 55 selected featu
 
 | Metric | Value |
 |---|---:|
-| R² (log) | 0.2676 |
-| RMSE (log) | 0.8324 |
-| MAE (log) | 0.6502 |
-| RMSE (THB) | 585.47 |
-| MAE (THB) | 309.94 |
+| R² (log) | 0.2673 |
+| RMSE (log) | 0.8326 |
+| MAE (log) | 0.6508 |
+| RMSE (THB) | 582.65 |
+| MAE (THB) | 308.05 |
+| CV R² (log) | 0.2533 ± 0.0154 |
 
 Prediction script: `predict.py` loads `models/xgboost.joblib` and `models/name_pca.joblib`, transforms a raw listing (`Name`, `Section`, `Shop Location`, `Total Reviews`) the same way as training, and returns predicted THB prices in `dataset/predictions.csv`.
+
+## Performance work
+
+A focused pass improved **both** runtime and accuracy capability. The deployed model is **unchanged**
+unless a tuned model clearly beats it on the held-out test (per scope: add capability, don't auto-swap).
+
+### Runtime
+
+- **Embedding cache** (`models/name_embeddings.joblib`, keyed on a SHA-256 of the `Name` series, cap 8
+  name-sets). Repeat `main.py` / `predict.py` runs on the same dataset skip the MiniLM encode entirely
+  — the dominant cost.
+- **PCA reuse = correctness fix + speed.** `predict.py` now loads the fitted `models/name_pca.joblib`
+  and calls `pca.transform` instead of refitting on the prediction batch. This both removes the refit
+  cost and fixes a latent train/predict basis mismatch: sklearn's randomized SVD gives
+  `fit_transform(X) ≠ fit(X).transform(X)` by ~0.03, so the old predict path silently shifted features
+  vs training. Training now uses the same `fit`-then-`transform` path as predict, so both are
+  consistent (max abs diff ~7.6e-8) and recover the original R²≈0.267.
+- **Predict fast path** (`build_predict_table` in `src/feature_engineer.py`) skips the target column
+  and reuses the fitted PCA; batches missing some section/region dummies are padded via `reindex`.
+
+### Accuracy capability
+
+Shared `src/metrics.py` hoists the duplicated `evaluate()` and adds K-fold CV (mean±std). Run the
+tuning capability with `uv run python -m src.tune`; results are written to `models/tuning_results.json`.
+
+| Candidate | Held R² (log) | Held RMSE (THB) | CV R² (log) |
+|---|---:|---:|---:|
+| Current XGBoost (deployed) | 0.2673 | 582.65 | 0.2533 ± 0.0154 |
+| Tuned XGBoost | 0.3146 | 543.24 | 0.2735 ± 0.0373 |
+| Tuned GBDT | 0.2770 | 563.92 | 0.2652 ± 0.0202 |
+| HistGradientBoosting | 0.2879 | 568.78 | 0.2572 ± 0.0182 |
+| RandomForest | **0.3186** | 557.67 | 0.2864 ± 0.0205 |
+
+RandomForest is now the **clear top candidate** — highest held-out R² (ΔR² +0.051 vs deployed)
+and the tightest CV spread (±0.0205) — yet is **not** auto-promoted. To promote:
+`cp models/tuned_rf.joblib models/xgboost.joblib` and re-run `predict.py` (selected-features list
+and PCA are unchanged). Tuned GBDT is marginal; HistGBM and tuned XGBoost are also clear winners
+but slightly behind RandomForest. Note the `n_jobs=1` ceiling makes the RF search the slowest stage
+(~190s); it is the natural candidate for subprocess-isolated parallelism next.
 
 ## What drives the price
 
@@ -208,8 +248,9 @@ Prediction script: `predict.py` loads `models/xgboost.joblib` and `models/name_p
 
 ## Next steps (not done)
 
-- Tune the XGBoost/GBDT hyperparameters now that embeddings are the best feature set.
-- Add K-fold cross-validation for a more robust metric estimate.
-- Try `HistGradientBoostingRegressor` or `RandomForestRegressor`.
-- Experiment with a larger embedding dimension or a Thai-specific sentence encoder.
-- Engineer interaction features (e.g. section × title length).
+- Promote the tuned RandomForest (`models/tuned_rf.joblib`, held R² 0.3186) over the deployed model
+  once the uplift is confirmed on fresh data — capability exists, swap is opt-in (see Performance work).
+- Experiment with a larger embedding dimension (`EMBEDDING_DIM` is now a parameter; 32-dim is a
+  one-line change) or a Thai-specific sentence encoder.
+- Reclaim joblib parallelism for the tuning search via subprocess isolation (the `n_jobs=1` ceiling
+  is deliberate — avoids the torch/joblib segfault on macOS; see `src/embeddings.py`).
