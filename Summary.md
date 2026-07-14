@@ -48,7 +48,16 @@ On the selected 39 region-level features (no embeddings), sklearn GradientBoosti
 
 ## What the wrapper cut
 
-With the region + embedding encoding, `RFECV` kept **55 of 59** features. The four dropped columns are usually low-signal region columns or one of the legacy name statistics (`name_length` / `name_word_count`).
+With the region + embedding encoding, `RFECV` kept **55 of 59** features. The four dropped features were:
+
+| Dropped feature | Why it was likely cut |
+|---|---|
+| `has_reviews` | Review presence adds almost no price signal once `name_semantic_pca_*` and `name_word_count` are available. |
+| `log_total_reviews` | Number of reviews is not a strong price predictor in this dataset. |
+| `name_length` | Title character count is redundant with `name_word_count` and weaker than the semantic embeddings. |
+| `shop_region_central` | The Central region one-hot carries less signal than other regions; the remaining region columns are enough. |
+
+In short, the wrapper removed the review group, the weaker of the two title-length statistics, and the lowest-signal region column.
 
 ## Does `Shop Location` matter?
 
@@ -98,7 +107,7 @@ Two plots are produced:
 
 PCA components do **not** get human-readable labels like "premiumness". They are just ordered directions of variance: `pca_00` is the broadest direction, `pca_04` is the 5th direction, etc. The model happens to find `pca_04` most useful for predicting price, but that direction may combine several real-world concepts at once.
 
-| Rank | Feature | Mean |SHAP value| | Interpretation |
+| Rank | Feature | Mean absolute SHAP value | Interpretation |
 |---:|---|---:|---|
 | 1 | `name_semantic_pca_04` | 0.0926 | 5th PCA direction of the product-name embedding. This learned semantic direction most strongly separates high/low log-price predictions in the model. |
 | 2 | `name_semantic_pca_00` | 0.0881 | 1st PCA direction — usually captures the broadest semantic variance in product titles. |
@@ -110,7 +119,7 @@ PCA components do **not** get human-readable labels like "premiumness". They are
 
 Region features rank far below the embedding/title signals:
 
-| Feature | Mean |SHAP value| |
+| Feature | Mean absolute SHAP value |
 |---|---:|
 | `shop_region_northeastern` | 0.0089 |
 | `shop_region_northern` | 0.0063 |
@@ -133,6 +142,7 @@ This confirms that **product title semantics carry much more pricing signal than
 |---|---|
 | SHAP feature importance bar plot | `notebooks/figures/shap_importance.png` |
 | SHAP summary (beeswarm) plot | `notebooks/figures/shap_summary.png` |
+| Predictions on raw table | `dataset/predictions.csv` |
 
 ## All artifacts
 
@@ -168,20 +178,38 @@ All reproducible artifacts are ignored by git.
 
 All use small multiples or grouped bars so each metric uses its own natural scale.
 
-## Recommendation
+## Outcome (basic)
 
-Use the **name-embedding + region-level XGBRegressor** as the default pipeline:
+The pipeline produces a usable price-prediction model with a single command:
 
-- It uses **55 features**, only modestly more than the 39-feature non-embedding model.
-- It delivers the best R² (0.2676) and the lowest THB errors (RMSE 585.47, MAE 309.94).
-- It beats sklearn GradientBoostingRegressor on the same embedding feature set.
+```bash
+uv run python main.py   # train + evaluate + interpret + compare
+uv run python predict.py # generate predictions.csv from the raw table
+```
 
-Keep the non-embedding region-level model and the province-level model as ablations: they show that embeddings add substantial signal and that finer location granularity helps only slightly at much higher dimensionality.
+Final model: **name-embedding + region-level XGBRegressor** on 55 selected features.
+
+| Metric | Value |
+|---|---:|
+| R² (log) | 0.2676 |
+| RMSE (log) | 0.8324 |
+| MAE (log) | 0.6502 |
+| RMSE (THB) | 585.47 |
+| MAE (THB) | 309.94 |
+
+Prediction script: `predict.py` loads `models/xgboost.joblib` and `models/name_pca.joblib`, transforms a raw listing (`Name`, `Section`, `Shop Location`, `Total Reviews`) the same way as training, and returns predicted THB prices in `dataset/predictions.csv`.
+
+## What drives the price
+
+1. **Product name semantics** — PCA-compressed sentence embeddings dominate SHAP importance.
+2. **Title length (`name_word_count`)** — longer titles still correlate with higher prices.
+3. **Product section** — each health/wellness category has its own price band.
+4. **Shop region** — small effect compared to name/section.
 
 ## Next steps (not done)
 
 - Tune the XGBoost/GBDT hyperparameters now that embeddings are the best feature set.
+- Add K-fold cross-validation for a more robust metric estimate.
 - Try `HistGradientBoostingRegressor` or `RandomForestRegressor`.
 - Experiment with a larger embedding dimension or a Thai-specific sentence encoder.
 - Engineer interaction features (e.g. section × title length).
-- Add cross-validation beyond the single held-out test set.

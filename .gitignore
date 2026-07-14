@@ -22,6 +22,9 @@ dataset/test.csv
 # Generated model artifacts (reproducible from src/train.py + RANDOM_STATE)
 models/
 
+# Generated predictions (reproducible from predict.py)
+dataset/predictions.csv
+
 # OS / editor
 .DS_Store
 .idea/
