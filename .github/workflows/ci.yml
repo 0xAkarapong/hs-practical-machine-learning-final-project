@@ -41,7 +41,7 @@ jobs:
         with:
           python-version-file: ".python-version"
           enable-cache: true
-      - run: uv sync --frozen --group dev
+      - run: uv sync --frozen --group dev --group notebooks
       - run: uv run pytest
       - name: Execute notebooks (smoke test)
         run: uv run jupyter nbconvert --to notebook --execute --output-dir=/tmp/nbexec --ExecutePreprocessor.timeout=300 notebooks/*.ipynb

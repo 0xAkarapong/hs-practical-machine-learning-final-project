@@ -3,23 +3,41 @@ name = "hs-practical-machine-learning-final-project"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13,<3.14"   # ponytail: pin 3.13 — CPU index's newest cp313 torch is 2.13.0+cpu (zero skew vs mac PyPI 2.13.0); cp314 CPU tops out at 2.9.1+cpu (big skew), and PyPI cp314 torch pulls ~2-3GB nvidia CUDA pkgs into the image
 dependencies = [
-    "ipykernel>=7.3.0",
     "matplotlib>=3.11.0",
-    "nbconvert>=7.17.1",
     "pandas>=3.0.3",
     "scikit-learn>=1.9.0",
     "seaborn>=0.13.2",
     "sentence-transformers>=5.6.0",
     "shap>=0.52.0",
+    # torch listed explicitly (not just transitive via sentence-transformers) so
+    # [tool.uv.sources] binds it -> CPU wheel on linux, PyPI (MPS) on mac.
+    "torch>=2.6.0",
     "xgboost>=3.3.0",
 ]
+
+[tool.uv]
+# CPU-only torch on linux (Docker/CI) -> drops ~2-3GB of nvidia CUDA pkgs.
+# mac keeps PyPI torch (MPS for local dev). cp313 CPU wheel = torch 2.13.0+cpu.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [dependency-groups]
 dev = [
     "ruff>=0.15.21",
     "pytest>=8.0.0",
+]
+# Notebook execution only — NOT installed in the Docker runtime image.
+# Local: `uv sync --group notebooks`. CI: `--group dev --group notebooks`.
+notebooks = [
+    "ipykernel>=7.3.0",
+    "nbconvert>=7.17.1",
 ]
 
 [tool.ruff]

@@ -1,0 +1,13 @@
+services:
+  pipeline:
+    build: .
+    image: hs-ml:latest
+    # Train the full pipeline, then predict — one command yields models + predictions.
+    command: sh -c "python main.py && python predict.py"
+    volumes:
+      - models:/app/models
+      - dataset:/app/dataset
+
+volumes:
+  models:
+  dataset:
