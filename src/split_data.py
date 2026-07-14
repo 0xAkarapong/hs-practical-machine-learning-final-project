@@ -52,8 +52,10 @@ def run_split():
     print(f"Test:   {test_table.shape[0]:,} rows → {TEST_PATH.name}")
     train_target_mean = train_table[TARGET_COLUMN].mean()
     test_target_mean = test_table[TARGET_COLUMN].mean()
-    print(f"Target '{TARGET_COLUMN}' — train mean {train_target_mean:.4f}, "
-          f"test mean {test_target_mean:.4f}")
+    print(
+        f"Target '{TARGET_COLUMN}' — train mean {train_target_mean:.4f}, "
+        f"test mean {test_target_mean:.4f}"
+    )
 
 
 if __name__ == "__main__":
