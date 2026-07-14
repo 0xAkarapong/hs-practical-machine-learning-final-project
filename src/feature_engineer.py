@@ -38,6 +38,64 @@ def map_to_region(cleaned_province: str) -> str:
     return PROVINCE_TO_REGION.get(cleaned_province, "unknown")
 
 
+# --- Text-derived features from Name + cleaned Total Sold ---------------------
+# ponytail: cheap regex signals the sentence embeddings don't fully capture —
+# dosage magnitude, unit/weight presence, authenticity/premium keywords, bundle
+# ("เซต/แถม/PRE-SALE") flags, and Thai/English ratio. RFECV prunes whatever is
+# noise. Also parses the messy `Total Sold` Thai string ("4,819 ชิ้น") that the
+# pipeline never used — corr(log_total_sold, log_price) ≈ -0.22, a real signal.
+_DIGIT_TOKEN = re.compile(r"\d[\d,]*")
+_THAI_CHARS = re.compile(r"[฀-๿]")
+_WEIGHT_UNITS = re.compile(r"mg|มก\.?|กรัม|ml|มล\.?", re.IGNORECASE)
+_COUNT_UNITS = re.compile(
+    r"แคปซูล|เม็ด|กล่อง|ซอง|ขวด|แผง|ชิ้น|tablets|capsules|pcs", re.IGNORECASE
+)
+_AUTHENTIC = re.compile(r"ของแท้|แท้|original|genuine", re.IGNORECASE)
+_BUNDLE = re.compile(r"เซต|set|แถม|pre[-\s]?sale|value", re.IGNORECASE)
+
+
+def _parse_total_sold(value) -> float:
+    """Turn '4,819 ชิ้น' / '7 ชิ้น' / NaN into a float count (0 if missing)."""
+    if pd.isna(value):
+        return 0.0
+    match = _DIGIT_TOKEN.search(str(value))
+    return float(match.group().replace(",", "")) if match else 0.0
+
+
+def _name_text_features(names: pd.Series) -> pd.DataFrame:
+    """Regex-based features from the product Name (price-relevant, embedding-blind)."""
+    s = names.fillna("").astype(str)
+
+    def _max_qty(text: str) -> float:
+        nums = [_to_float(t) for t in _DIGIT_TOKEN.findall(text)]
+        return max(nums) if nums else 0.0
+
+    qty = s.apply(_max_qty)
+    non_space = s.str.replace(r"\s", "", regex=True)
+    return pd.DataFrame(
+        {
+            "name_qty_log": np.log1p(qty),
+            "name_has_weight_unit": s.str.contains(_WEIGHT_UNITS, regex=True).astype(
+                int
+            ),
+            "name_has_count_unit": s.str.contains(_COUNT_UNITS, regex=True).astype(int),
+            "name_is_authentic": s.str.contains(_AUTHENTIC, regex=True).astype(int),
+            "name_has_bundle": s.str.contains(_BUNDLE, regex=True).astype(int),
+            "name_thai_ratio": non_space.apply(
+                lambda t: (len(_THAI_CHARS.findall(t)) / len(t)) if t else 0.0
+            ),
+        },
+        index=names.index,
+    )
+
+
+def _to_float(token: str) -> float:
+    try:
+        return float(token.replace(",", ""))
+    except ValueError:
+        return 0.0
+
+
 def build_feature_table(
     df: pd.DataFrame,
     use_region: bool = USE_REGION,
@@ -70,6 +128,7 @@ def build_feature_table(
     features["has_reviews"] = (df["Total Reviews"] > 0).astype(int)
     features["name_length"] = df["Name"].str.len()
     features["name_word_count"] = df["Name"].str.split().str.len().fillna(0).astype(int)
+    features["log_total_sold"] = np.log1p(df["Total Sold"].apply(_parse_total_sold))
 
     print("Encoding product names to sentence embeddings...")
     name_embeddings, _, name_pca = build_name_embeddings(
@@ -78,6 +137,8 @@ def build_feature_table(
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(name_pca, PCA_PATH)
     print(f"Saved:  {PCA_PATH.name} → {PCA_PATH.parent.name}/")
+
+    name_text = _name_text_features(df["Name"])
 
     categorical_df = pd.DataFrame(
         {
@@ -100,7 +161,9 @@ def build_feature_table(
         dtype=int,
     )
 
-    feature_df = pd.concat([features, name_embeddings, dummy_features], axis=1)
+    feature_df = pd.concat(
+        [features, name_embeddings, name_text, dummy_features], axis=1
+    )
     feature_df = feature_df.replace([np.inf, -np.inf], np.nan).fillna(0)
     if include_interactions:
         feature_df = add_interaction_features(feature_df)
@@ -156,10 +219,12 @@ def build_predict_table(
     features["has_reviews"] = (df["Total Reviews"] > 0).astype(int)
     features["name_length"] = df["Name"].str.len()
     features["name_word_count"] = df["Name"].str.split().str.len().fillna(0).astype(int)
+    features["log_total_sold"] = np.log1p(df["Total Sold"].apply(_parse_total_sold))
 
     name_embeddings, _, _ = build_name_embeddings(
         df["Name"], embedding_dim=embedding_dim, pca=pca
     )
+    name_text = _name_text_features(df["Name"])
 
     categorical_df = pd.DataFrame(
         {"section": df["Section"].map(clean_category_value)},
@@ -179,7 +244,9 @@ def build_predict_table(
         dtype=int,
     )
 
-    feature_df = pd.concat([features, name_embeddings, dummy_features], axis=1)
+    feature_df = pd.concat(
+        [features, name_embeddings, name_text, dummy_features], axis=1
+    )
     feature_df = feature_df.replace([np.inf, -np.inf], np.nan).fillna(0)
     return feature_df
 

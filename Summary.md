@@ -4,7 +4,7 @@
 
 The end-to-end pipeline now runs in `main.py` as:
 
-1. **Feature engineering** — build the modeling table from `health_and_wellness_no_outliers.csv`. Product `Name` is now represented by both the old text statistics (`name_length`, `name_word_count`) and 32 PCA-compressed sentence embeddings (`name_semantic_pca_*`) from `paraphrase-multilingual-mpnet-base-v2`.
+1. **Feature engineering** — build the modeling table from `health_and_wellness_no_outliers.csv`. Product `Name` is represented by both text statistics (`name_length`, `name_word_count`) and 32 PCA-compressed sentence embeddings (`name_semantic_pca_*`) from `paraphrase-multilingual-mpnet-base-v2`, plus regex-derived text signals (`name_qty_log`, `name_has_weight_unit`, `name_has_count_unit`, `name_is_authentic`, `name_has_bundle`, `name_thai_ratio`) that the embeddings don't fully capture. A parsed `log_total_sold` (from the messy Thai `"… ชิ้น"` column, previously unused) is also included.
 2. **Split** — stratified train/test split on `log_price_thb` (80/20, seed 42).
 3. **Baseline** — `DummyRegressor(strategy="mean")` as a sanity-check reference.
 4. **Feature selection** — `RFECV` wrapper using `RidgeCV` to drop low-value features.
@@ -23,8 +23,8 @@ The end-to-end pipeline now runs in `main.py` as:
 | Step | Model | Features | R² (log) | RMSE (log) | MAE (log) | RMSE (THB) | MAE (THB) |
 |---|---|---:|---:|---:|---:|---:|---:|
 | Baseline | Mean predictor | — | −0.0001 | 0.9727 | 0.7766 | 638.08 | 348.71 |
-| Selected GBDT | GradientBoostingRegressor | 73 | 0.2884 | 0.8205 | 0.6453 | 577.34 | 305.22 |
-| Selected XGBoost | XGBRegressor | **73** | **0.2994** | **0.8141** | **0.6363** | **577.78** | **301.77** |
+| Selected GBDT | GradientBoostingRegressor | 78 | 0.3358 | 0.7927 | 0.6294 | 566.11 | 301.00 |
+| Selected XGBoost | XGBRegressor | **78** | **0.3652** | **0.7749** | **0.6075** | **561.54** | **292.38** |
 
 With the sentence-embedding features, **XGBoost now beats sklearn GradientBoostingRegressor** on the same selected subset. Both models improve substantially over the non-embedding region-level model.
 
@@ -48,14 +48,16 @@ On the selected 39 region-level features (no embeddings), sklearn GradientBoosti
 
 ## What the wrapper cut
 
-With the region + embedding encoding, `RFECV` kept **73 of 75** features. The two dropped features were:
+With the region + embedding + text-feature encoding, `RFECV` kept **78 of 82** features. The four dropped features were:
 
 | Dropped feature | Why it was likely cut |
 |---|---|
-| `has_reviews` | Review presence adds almost no price signal once `name_semantic_pca_*` and `name_word_count` are available. |
-| `log_total_reviews` | Number of reviews is not a strong price predictor in this dataset. |
+| `has_reviews` | Review presence adds almost no price signal once `name_semantic_pca_*`, `name_word_count`, and `log_total_sold` are available. |
+| `log_total_reviews` | Number of reviews is subsumed by `log_total_sold` (sales volume) and the title signals. |
+| `name_length` | Title character count is redundant with `name_word_count` and the semantic embeddings. |
+| `section_Brain_Memory` | A sparse category column with little price signal. |
 
-In short, with the stronger mpnet embeddings the wrapper keeps the title-length and region columns and drops only the review group.
+In short, adding `log_total_sold` and the regex name signals let the wrapper drop the entire review group plus the weaker title-length statistic; all 7 new text features were kept.
 
 ## Does `Shop Location` matter?
 
@@ -185,19 +187,19 @@ uv run python main.py   # train + evaluate + interpret + compare
 uv run python predict.py # generate predictions.csv from the raw table
 ```
 
-Final model: **name-embedding + region-level XGBRegressor** on 73 selected features — the
+Final model: **name-embedding + region-level XGBRegressor** on 78 selected features — the
 tuned XGBoost has been promoted to `models/xgboost.joblib` (n_estimators 300, max_depth 7,
 learning_rate 0.05; the fixed-default model that `main.py` retrained is preserved as
 `models/tuned_xgboost.joblib`'s source).
 
 | Metric | Value |
 |---|---:|
-| R² (log) | 0.3949 |
-| RMSE (log) | 0.7566 |
-| MAE (log) | 0.5691 |
-| RMSE (THB) | 548.77 |
-| MAE (THB) | 276.30 |
-| CV R² (log) | 0.3450 ± 0.0402 |
+| R² (log) | 0.4354 |
+| RMSE (log) | 0.7309 |
+| MAE (log) | 0.5530 |
+| RMSE (THB) | 539.27 |
+| MAE (THB) | 269.86 |
+| CV R² (log) | 0.4082 ± 0.0322 |
 
 Prediction script: `predict.py` loads `models/xgboost.joblib` and `models/name_pca.joblib`, transforms a raw listing (`Name`, `Section`, `Shop Location`, `Total Reviews`) the same way as training, and returns predicted THB prices in `dataset/predictions.csv`.
 
@@ -227,22 +229,21 @@ tuning capability with `uv run python -m src.tune`; results are written to `mode
 
 | Candidate | Held R² (log) | Held RMSE (THB) | CV R² (log) |
 |---|---:|---:|---:|
-| Current XGBoost (deployed) | 0.2994 | 577.78 | 0.2676 ± 0.0310 |
-| Tuned XGBoost | **0.3949** | 548.77 | 0.3450 ± 0.0402 |
-| Tuned GBDT | 0.3679 | 550.23 | 0.3165 ± 0.0474 |
-| HistGradientBoosting | 0.3488 | 551.29 | 0.3349 ± 0.0464 |
-| RandomForest | 0.3635 | 559.79 | 0.3192 ± 0.0317 |
+| Current XGBoost (fixed-default) | 0.3652 | 561.54 | 0.3536 ± 0.0216 |
+| Tuned XGBoost | **0.4354** | 539.27 | 0.4082 ± 0.0322 |
+| Tuned GBDT | 0.4161 | 543.54 | 0.3867 ± 0.0373 |
+| HistGradientBoosting | 0.3986 | 553.23 | 0.3924 ± 0.0332 |
+| RandomForest | 0.3956 | 552.98 | 0.3719 ± 0.0166 |
 
-All four tuned candidates are **clear winners** over the fixed-default XGBoost (each ΔR² ≥ +0.049).
-Switching the encoder to `paraphrase-multilingual-mpnet-base-v2` (768-dim raw, multilingual
-incl. Thai) lifted every model vs the prior MiniLM run — the fixed-default XGBoost went
-0.2784 → 0.2994 and the best candidate 0.3381 → 0.3949. With mpnet, **tuned XGBoost is the top
-candidate** on held-out R² (ΔR² +0.096 vs the fixed-default model) — note its held-out (0.3949)
-runs above its CV mean (0.3450±0.0402), so some held-out optimism; RandomForest is a close second
-with a tighter CV spread (0.3192 ± 0.0317).
+Adding the regex name features + parsed `log_total_sold` lifted every model — the fixed-default
+XGBoost went 0.2994 → 0.3652 (+0.066) and the tuned XGBoost 0.3949 → 0.4354 (+0.041). The CV
+estimate also tightened (tuned XGBoost 0.3450 ± 0.0402 → 0.4082 ± 0.0322), so the gain is real
+rather than held-out luck. All four tuned candidates are **clear winners** over the fixed-default
+XGBoost; **tuned XGBoost is the top candidate** on held-out R², with RandomForest a more
+conservative alternative (tightest CV spread ±0.0166).
 
 **Promoted.** The tuned XGBoost has been copied to `models/xgboost.joblib` and verified on the
-held-out test (held R² 0.3949, RMSE(THB) 548.77, CV 0.3450 ± 0.0402) — it is now the deployed
+held-out test (held R² 0.4354, RMSE(THB) 539.27, CV 0.4082 ± 0.0322) — it is now the deployed
 model. Caveat: `main.py` still retrains the **fixed-default** XGBoost and would overwrite the
 promoted model, so do not re-run `main.py` without re-promoting
 (`cp models/tuned_xgboost.joblib models/xgboost.joblib`). The `n_jobs=1` ceiling makes the RF
@@ -258,12 +259,10 @@ parallelism next.
 
 ## Next steps (not done)
 
-- Confirm the promoted tuned XGBoost (held R² 0.3949) on fresh data before trusting the uplift;
-  RandomForest (`held R² 0.3635`, tighter CV 0.3192 ± 0.0317) is a more conservative alternative if
-  the tuned model's held-out optimism (0.3949 vs CV 0.3450) doesn't hold.
+- Confirm the promoted tuned XGBoost (held R² 0.4354) on fresh data before trusting the uplift;
+  RandomForest (`held R² 0.3956`, tightest CV 0.3719 ± 0.0166) is a more conservative alternative.
 - Try a Thai-specific sentence encoder (mpnet is multilingual but not Thai-trained; a Thai SBERT
   model may capture local phrasing better — a different encoder auto-invalidates the embedding cache).
-- Add text-derived features (dosage/quantity, brand, keyword flags like ของแท้/premium) the embeddings miss.
 - Reclaim joblib parallelism for the tuning search via subprocess isolation (the `n_jobs=1` ceiling
   is deliberate — avoids the torch/joblib segfault on macOS; see `src/embeddings.py`).
 - Avoid re-running `main.py` without re-promoting — it retrains the fixed-default XGBoost and
