@@ -3,7 +3,7 @@ import pandas as pd
 
 from src.baseline import train_baseline
 from src.feature_selection import select_features
-from src.train import evaluate_model, plot_result, train_model
+from src.train import evaluate_model, plot_result, train_gbdt
 
 
 def test_train_and_evaluate_produces_finite_metrics():
@@ -17,7 +17,7 @@ def test_train_and_evaluate_produces_finite_metrics():
         X_test["a"] * 2.0 + rng.normal(scale=0.1, size=50), name="log_price_thb"
     )
 
-    model = train_model(X_train, y_train)
+    model = train_gbdt(X_train, y_train)
     preds = model.predict(X_test)
 
     assert np.all(np.isfinite(preds))
