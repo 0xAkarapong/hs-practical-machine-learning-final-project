@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import shap
 
-from src.split_data import TEST_PATH
+from src._03_split_data import TEST_PATH
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"

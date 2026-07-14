@@ -4,13 +4,16 @@
 
 The end-to-end pipeline now runs in `main.py` as:
 
-1. **Feature engineering** — build the modeling table from `health_and_wellness_no_outliers.csv`. Product `Name` is represented by both text statistics (`name_length`, `name_word_count`) and 32 PCA-compressed sentence embeddings (`name_semantic_pca_*`) from `paraphrase-multilingual-mpnet-base-v2`, plus regex-derived text signals (`name_qty_log`, `name_has_weight_unit`, `name_has_count_unit`, `name_is_authentic`, `name_has_bundle`, `name_thai_ratio`) that the embeddings don't fully capture. A parsed `log_total_sold` (from the messy Thai `"… ชิ้น"` column, previously unused) is also included.
-2. **Split** — stratified train/test split on `log_price_thb` (80/20, seed 42).
-3. **Baseline** — `DummyRegressor(strategy="mean")` as a sanity-check reference.
-4. **Feature selection** — `RFECV` wrapper using `RidgeCV` to drop low-value features.
-5. **Train** — `GradientBoostingRegressor` and `XGBRegressor` on the selected feature subset.
-6. **Evaluate & plot** — report metrics in both log and THB space, save predicted-vs-actual plots.
-7. **Interpret** — SHAP-based global feature importance and summary plots for the GBDT.
+1. **Cleaning** (`src/_01_clean_data.py`, ported from `notebooks/02 anomaly_detection.ipynb`) — dedup the raw scrape (68,499 → 2,622 real listings), parse `฿`-prefixed prices, then drop high-confidence anomalies flagged by **both** global IQR and per-section robust z (median/MAD, |z|>3.5) → `dataset/health_and_wellness_no_outliers.csv` (2,610 rows). This makes the cleaned input reproducible from the raw CSV without running the notebook.
+2. **Feature engineering** — build the modeling table from `health_and_wellness_no_outliers.csv`. Product `Name` is represented by both text statistics (`name_length`, `name_word_count`) and 32 PCA-compressed sentence embeddings (`name_semantic_pca_*`) from `paraphrase-multilingual-mpnet-base-v2`, plus regex-derived text signals (`name_qty_log`, `name_has_weight_unit`, `name_has_count_unit`, `name_is_authentic`, `name_has_bundle`, `name_thai_ratio`) that the embeddings don't fully capture. A parsed `log_total_sold` (from the messy Thai `"… ชิ้น"` column, previously unused) is also included.
+3. **Split** — stratified train/test split on `log_price_thb` (80/20, seed 42).
+4. **Baseline** — `DummyRegressor(strategy="mean")` as a sanity-check reference.
+5. **Feature selection** — `RFECV` wrapper using `RidgeCV` to drop low-value features.
+6. **Train** — `GradientBoostingRegressor` and `XGBRegressor` on the selected feature subset.
+7. **Evaluate & plot** — report metrics in both log and THB space, save predicted-vs-actual plots.
+8. **Interpret** — SHAP-based global feature importance and summary plots for the GBDT.
+
+Standalone (not in `main.py`): `src/eda.py` (ported from `notebooks/01 eda.ipynb`, run via `python -m src.eda`) and the four comparison scripts under `src/comparisons/` (baseline, embeddings, gbdt_xgboost, models).
 
 `Shop Location` is encoded as **region-level** one-hot instead of province-level, reducing dimensionality while keeping the location signal.
 
@@ -86,11 +89,11 @@ Provinces are grouped into the standard Thai geographic regions:
 - `overseas` — ต่างประเทศ
 - `unknown` — Missing/unknown location
 
-The mapping lives in `src/regions.py` and is used by both `src/feature_engineer.py` and `notebooks/03 feature_engineer.ipynb`.
+The mapping lives in `src/common/regions.py` and is used by both `src/_02_feature_engineer.py` and `notebooks/03 feature_engineer.ipynb`.
 
 ## Model interpretation (SHAP)
 
-`src/interpret.py` uses **TreeSHAP** on the selected GBDT to explain predictions. SHAP values answer: *"How much does each feature push this product's predicted log-price above or below the average prediction?"* They are derived from game theory, sum up to the model output, and work natively with tree ensembles.
+`src/_07_interpret.py` uses **TreeSHAP** on the selected GBDT to explain predictions. SHAP values answer: *"How much does each feature push this product's predicted log-price above or below the average prediction?"* They are derived from game theory, sum up to the model output, and work natively with tree ensembles.
 
 Two plots are produced:
 
@@ -148,10 +151,10 @@ This confirms that **product title semantics carry much more pricing signal than
 
 | File | Location |
 |---|---|
-| Feature engineering module | `src/feature_engineer.py` |
-| Sentence-embedding module | `src/embeddings.py` |
-| Region mapping | `src/regions.py` |
-| Model interpretation | `src/interpret.py` |
+| Feature engineering module | `src/_02_feature_engineer.py` |
+| Sentence-embedding module | `src/common/embeddings.py` |
+| Region mapping | `src/common/regions.py` |
+| Model interpretation | `src/_07_interpret.py` |
 | Feature-engineered table (with embeddings) | `dataset/health_and_wellness_feature_engineered.csv` |
 | Feature-engineered table (without embeddings) | `dataset/health_and_wellness_feature_engineered_no_embeddings.csv` |
 | GBDT model | `models/gradient_boosting.joblib` |
@@ -219,12 +222,12 @@ unless a tuned model clearly beats it on the held-out test (per scope: add capab
   `fit_transform(X) ≠ fit(X).transform(X)` by ~0.03, so the old predict path silently shifted features
   vs training. Training now uses the same `fit`-then-`transform` path as predict, so both are
   consistent (max abs diff ~7.6e-8) and recover the original R²≈0.267.
-- **Predict fast path** (`build_predict_table` in `src/feature_engineer.py`) skips the target column
+- **Predict fast path** (`build_predict_table` in `src/_02_feature_engineer.py`) skips the target column
   and reuses the fitted PCA; batches missing some section/region dummies are padded via `reindex`.
 
 ### Accuracy capability
 
-Shared `src/metrics.py` hoists the duplicated `evaluate()` and adds K-fold CV (mean±std). Run the
+Shared `src/common/metrics.py` hoists the duplicated `evaluate()` and adds K-fold CV (mean±std). Run the
 tuning capability with `uv run python -m src.tune`; results are written to `models/tuning_results.json`.
 
 | Candidate | Held R² (log) | Held RMSE (THB) | CV R² (log) |
@@ -264,6 +267,6 @@ parallelism next.
 - Try a Thai-specific sentence encoder (mpnet is multilingual but not Thai-trained; a Thai SBERT
   model may capture local phrasing better — a different encoder auto-invalidates the embedding cache).
 - Reclaim joblib parallelism for the tuning search via subprocess isolation (the `n_jobs=1` ceiling
-  is deliberate — avoids the torch/joblib segfault on macOS; see `src/embeddings.py`).
+  is deliberate — avoids the torch/joblib segfault on macOS; see `src/common/embeddings.py`).
 - Avoid re-running `main.py` without re-promoting — it retrains the fixed-default XGBoost and
   overwrites `models/xgboost.joblib` (see Performance work).

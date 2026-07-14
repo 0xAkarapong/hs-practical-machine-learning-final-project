@@ -11,7 +11,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from src.feature_engineer import PCA_PATH, build_predict_table
+from src._02_feature_engineer import PCA_PATH, build_predict_table
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODELS_DIR = PROJECT_ROOT / "models"

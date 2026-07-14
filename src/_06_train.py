@@ -13,11 +13,16 @@ import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
 from xgboost import XGBRegressor
 
-from src.baseline import train_baseline
-from src.feature_selection import select_features
-from src.interpret import run_interpret
-from src.metrics import cross_val_metrics, evaluate_model, save_metrics, time_stage
-from src.split_data import RANDOM_STATE, TARGET_COLUMN, TEST_PATH, TRAIN_PATH
+from src._03_split_data import RANDOM_STATE, TARGET_COLUMN, TEST_PATH, TRAIN_PATH
+from src._04_feature_selection import select_features
+from src._05_baseline import train_baseline
+from src._07_interpret import run_interpret
+from src.common.metrics import (
+    cross_val_metrics,
+    evaluate_model,
+    save_metrics,
+    time_stage,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"

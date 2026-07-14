@@ -27,9 +27,14 @@ from sklearn.ensemble import (
 from sklearn.model_selection import KFold, RandomizedSearchCV
 from xgboost import XGBRegressor
 
-from src.metrics import cross_val_metrics, evaluate_model, save_metrics, time_stage
-from src.split_data import RANDOM_STATE, TARGET_COLUMN, TEST_PATH, TRAIN_PATH
-from src.train import train_xgboost
+from src._03_split_data import RANDOM_STATE, TARGET_COLUMN, TEST_PATH, TRAIN_PATH
+from src._06_train import train_xgboost
+from src.common.metrics import (
+    cross_val_metrics,
+    evaluate_model,
+    save_metrics,
+    time_stage,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"
@@ -156,7 +161,7 @@ def _recommend(results: dict):
 def run_tune() -> dict:
     """Tune XGB/GBDT + HistGBM, report CV±std and held-out, save tuned artifacts.
 
-    Run with: uv run python -m src.tune
+    Run with: uv run python -m src._08_tune
     """
     X_train, X_test, y_train, y_test = _load_selected_splits()
     results = {}
