@@ -4,7 +4,7 @@
 
 The end-to-end pipeline now runs in `main.py` as:
 
-1. **Feature engineering** — build the modeling table from `health_and_wellness_no_outliers.csv`.
+1. **Feature engineering** — build the modeling table from `health_and_wellness_no_outliers.csv`. Product `Name` is now represented by both the old text statistics (`name_length`, `name_word_count`) and 16 PCA-compressed sentence embeddings (`name_semantic_pca_*`) from `paraphrase-multilingual-MiniLM-L12-v2`.
 2. **Split** — stratified train/test split on `log_price_thb` (80/20, seed 42).
 3. **Baseline** — `DummyRegressor(strategy="mean")` as a sanity-check reference.
 4. **Feature selection** — `RFECV` wrapper using `RidgeCV` to drop low-value features.
@@ -14,20 +14,31 @@ The end-to-end pipeline now runs in `main.py` as:
 
 `Shop Location` is encoded as **region-level** one-hot instead of province-level, reducing dimensionality while keeping the location signal.
 
+> **Implementation note:** After adding `sentence-transformers`, the wrapper's `RFECV` and the XGBoost stage both run with `n_jobs=1`. Without this, the mix of torch/sentence-transformer threads and joblib parallelism caused a segfault during feature selection.
+
 ## Results
 
-### Region-level model (current default)
+### Name-embedding + region-level model (current default)
 
 | Step | Model | Features | R² (log) | RMSE (log) | MAE (log) | RMSE (THB) | MAE (THB) |
 |---|---|---:|---:|---:|---:|---:|---:|
-| Baseline | Mean predictor | — | −0.0001 | 0.9727 | 0.7766 | — | — |
-| Full GBDT | GradientBoostingRegressor | 43 | 0.1861 | 0.8775 | 0.6909 | 607.05 | 323.77 |
+| Baseline | Mean predictor | — | −0.0001 | 0.9727 | 0.7766 | 638.08 | 348.71 |
+| Selected GBDT | GradientBoostingRegressor | 55 | 0.2441 | 0.8456 | 0.6680 | 590.20 | 315.96 |
+| Selected XGBoost | XGBRegressor | **55** | **0.2676** | **0.8324** | **0.6502** | **585.47** | **309.94** |
+
+With the sentence-embedding features, **XGBoost now beats sklearn GradientBoostingRegressor** on the same selected subset. Both models improve substantially over the non-embedding region-level model.
+
+### Region-level model without embeddings (previous default)
+
+| Step | Model | Features | R² (log) | RMSE (log) | MAE (log) | RMSE (THB) | MAE (THB) |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Baseline | Mean predictor | — | −0.0001 | 0.9727 | 0.7766 | 638.08 | 348.71 |
 | Selected GBDT | GradientBoostingRegressor | **39** | **0.1658** | **0.8884** | **0.7013** | **607.32** | **326.31** |
 | Selected XGBoost | XGBRegressor | 39 | 0.1598 | 0.8915 | 0.7033 | 607.60 | 326.48 |
 
-On the selected 39 region-level features, **sklearn GradientBoostingRegressor outperforms XGBoost**. A grid search on the same 39 features found XGBoost's best R² = 0.1523 (`learning_rate=0.03, max_depth=7, n_estimators=100`), still below GBDT.
+On the selected 39 region-level features (no embeddings), sklearn GradientBoostingRegressor slightly outperforms XGBoost.
 
-### Province-level model (previous iteration)
+### Province-level model (earlier iteration)
 
 | Step | Model | Features | R² (log) | RMSE (log) | MAE (log) | RMSE (THB) | MAE (THB) |
 |---|---|---:|---:|---:|---:|---:|---:|
@@ -37,7 +48,7 @@ On the selected 39 region-level features, **sklearn GradientBoostingRegressor ou
 
 ## What the wrapper cut
 
-With the region encoding, `RFECV` kept **39 of 43** features. The four dropped columns are usually the review/name numeric features plus one or two low-signal region columns.
+With the region + embedding encoding, `RFECV` kept **55 of 59** features. The four dropped columns are usually low-signal region columns or one of the legacy name statistics (`name_length` / `name_word_count`).
 
 ## Does `Shop Location` matter?
 
@@ -77,32 +88,43 @@ Two plots are produced:
 - **`shap_importance.png`** — global bar plot of mean |SHAP value| per feature. Higher bars mean the feature changes more predictions by a larger amount.
 - **`shap_summary.png`** — beeswarm plot showing the distribution of SHAP values per feature. Color encodes the feature value (blue = low, red = high), and position shows direction/magnitude of the price effect.
 
-### Top 5 features by mean |SHAP value|
+### What is `name_semantic_pca_*`?
+
+`name_semantic_pca_*` is the **meaning of the product name compressed into 16 numbers**.
+
+- **name** = the product `Name` column (e.g. `"วิตามินซี 1000mg บำรุงผิว ของแท้"`).
+- **semantic** = the *meaning* of the title, not just how long it is. We use `sentence-transformers` (`paraphrase-multilingual-MiniLM-L12-v2`) to read the Thai/English text and turn it into a 384-number vector that captures concepts like "vitamin", "premium", "imported", "herbal", etc.
+- **PCA** = we then compress those 384 numbers down to 16 components so the tree model can handle them.
+
+PCA components do **not** get human-readable labels like "premiumness". They are just ordered directions of variance: `pca_00` is the broadest direction, `pca_04` is the 5th direction, etc. The model happens to find `pca_04` most useful for predicting price, but that direction may combine several real-world concepts at once.
 
 | Rank | Feature | Mean |SHAP value| | Interpretation |
 |---:|---|---:|---|
-| 1 | `name_word_count` | 0.1066 | Product title length/wordiness is the strongest price signal. Longer, more detailed titles are associated with higher (or more premium) listings. |
-| 2 | `section_Herbs_Traditional_Medicine` | 0.0732 | This category strongly shifts price downward — herbal/traditional products tend to be cheaper than average. |
-| 3 | `section_Protein` | 0.0482 | Protein supplements command distinct, often higher pricing. |
-| 4 | `section_Skin_Nourishment` | 0.0405 | Skincare-related products carry a category-specific price premium. |
-| 5 | `section_Breast_Enlargement` | 0.0382 | A small niche category with its own distinct price level. |
+| 1 | `name_semantic_pca_04` | 0.0926 | 5th PCA direction of the product-name embedding. This learned semantic direction most strongly separates high/low log-price predictions in the model. |
+| 2 | `name_semantic_pca_00` | 0.0881 | 1st PCA direction — usually captures the broadest semantic variance in product titles. |
+| 3 | `name_word_count` | 0.0750 | Title length/wordiness remains a strong price signal even after adding embeddings — longer, more detailed titles correlate with higher/premium listings. |
+| 4 | `name_semantic_pca_14` | 0.0705 | 15th PCA direction; a more specific semantic direction that still carries substantial pricing signal. |
+| 5 | `section_Herbs_Traditional_Medicine` | 0.0583 | This category strongly shifts price downward — herbal/traditional products tend to be cheaper than average. |
 
 ### Location signal
 
-Region features rank lower than section/name signals:
+Region features rank far below the embedding/title signals:
 
 | Feature | Mean |SHAP value| |
 |---|---:|
-| `shop_region_northern` | 0.0206 |
-| `shop_region_northeastern` | 0.0179 |
-| `shop_region_eastern` | 0.0133 |
+| `shop_region_northeastern` | 0.0089 |
+| `shop_region_northern` | 0.0063 |
+| `shop_region_eastern` | 0.0036 |
+| `shop_region_southern` | 0.0034 |
+| `shop_region_unknown` | 0.0025 |
 
-This confirms that **product section and title text carry more pricing signal than seller location**, but location still contributes meaningfully to the model. The regional effect is likely capturing differences in shipping costs, local competition, or supply-chain tiers.
+This confirms that **product title semantics carry much more pricing signal than seller location** after adding embeddings. Location still adds a small amount of explanatory power, but the dominant price drivers are now the PCA-compressed sentence-embedding representation of the product name and the product section.
 
 ### How to act on this
 
-- **Product title optimization** is the highest-leverage signal: longer, keyword-rich titles correlate with price. A title-embedding or text-length model could improve predictions further.
-- **Section-level pricing** is also strong: each health/wellness category has its own price band. A section-aware model or separate per-section baselines could help.
+- **Product title semantics** is now the highest-leverage signal: the sentence-embedding components explain the largest share of SHAP value. A dedicated text model or larger embedding dimension could improve predictions further.
+- **Title length still matters**: `name_word_count` remains in the top 3, so longer, keyword-rich titles continue to correlate with higher prices.
+- **Section-level pricing** is the next strongest structured signal: each health/wellness category has its own price band.
 - **Location is secondary**: region encoding is sufficient; province-level encoding only marginally improves performance at much higher dimensionality.
 
 ### Interpretation artifacts
@@ -117,16 +139,21 @@ This confirms that **product section and title text carry more pricing signal th
 | File | Location |
 |---|---|
 | Feature engineering module | `src/feature_engineer.py` |
+| Sentence-embedding module | `src/embeddings.py` |
 | Region mapping | `src/regions.py` |
 | Model interpretation | `src/interpret.py` |
-| Feature-engineered table | `dataset/health_and_wellness_feature_engineered.csv` |
+| Feature-engineered table (with embeddings) | `dataset/health_and_wellness_feature_engineered.csv` |
+| Feature-engineered table (without embeddings) | `dataset/health_and_wellness_feature_engineered_no_embeddings.csv` |
 | GBDT model | `models/gradient_boosting.joblib` |
 | XGBoost model | `models/xgboost.joblib` |
+| Fitted name-embedding PCA | `models/name_pca.joblib` |
 | Selected feature list | `models/selected_features.json` |
 | GBDT result plot | `notebooks/figures/predicted_vs_actual_gbdt.png` |
 | XGBoost result plot | `notebooks/figures/predicted_vs_actual_xgboost.png` |
 | Province vs region comparison | `notebooks/figures/model_comparison.png` |
 | GBDT vs XGBoost comparison | `notebooks/figures/gbdt_vs_xgboost.png` |
+| With/without embeddings comparison | `notebooks/figures/embedding_comparison.png` |
+| Baseline vs trained models | `notebooks/figures/baseline_comparison.png` |
 | SHAP importance | `notebooks/figures/shap_importance.png` |
 | SHAP summary | `notebooks/figures/shap_summary.png` |
 
@@ -136,22 +163,25 @@ All reproducible artifacts are ignored by git.
 
 - `model_comparison.png` — province-level vs region-level GBDT.
 - `gbdt_vs_xgboost.png` — GBDT vs XGBoost on the selected region-level features.
+- `embedding_comparison.png` — GBDT and XGBoost with vs without sentence embeddings.
+- `baseline_comparison.png` — baseline mean predictor vs GBDT vs XGBoost (R², RMSE log, RMSE THB).
 
-Both use small multiples (R² and RMSE on separate subplots) so each metric uses its own natural scale.
+All use small multiples or grouped bars so each metric uses its own natural scale.
 
 ## Recommendation
 
-Use the **region-level GradientBoostingRegressor** as the default pipeline:
+Use the **name-embedding + region-level XGBRegressor** as the default pipeline:
 
-- It uses only **39 features** vs 99 for province-level.
-- It beats XGBoost on the same feature set.
-- THB error is nearly identical to the province-level model (607 vs 605 RMSE).
+- It uses **55 features**, only modestly more than the 39-feature non-embedding model.
+- It delivers the best R² (0.2676) and the lowest THB errors (RMSE 585.47, MAE 309.94).
+- It beats sklearn GradientBoostingRegressor on the same embedding feature set.
 
-Keep the province-level model as evidence that finer location granularity helps slightly if complexity is not a constraint. XGBoost is not worth switching to here unless much more tuning or larger data is introduced.
+Keep the non-embedding region-level model and the province-level model as ablations: they show that embeddings add substantial signal and that finer location granularity helps only slightly at much higher dimensionality.
 
 ## Next steps (not done)
 
-- Hyperparameter tuning for the GBDT itself (not just XGBoost).
+- Tune the XGBoost/GBDT hyperparameters now that embeddings are the best feature set.
 - Try `HistGradientBoostingRegressor` or `RandomForestRegressor`.
-- Engineer richer text features from product `Name`.
+- Experiment with a larger embedding dimension or a Thai-specific sentence encoder.
+- Engineer interaction features (e.g. section × title length).
 - Add cross-validation beyond the single held-out test set.

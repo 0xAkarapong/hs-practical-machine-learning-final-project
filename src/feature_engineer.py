@@ -3,15 +3,24 @@
 import re
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 
+from src.embeddings import build_name_embeddings
 from src.regions import PROVINCE_TO_REGION
 from src.split_data import RANDOM_STATE, TARGET_COLUMN
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 INPUT_PATH = PROJECT_ROOT / "dataset" / "health_and_wellness_no_outliers.csv"
 OUTPUT_PATH = PROJECT_ROOT / "dataset" / "health_and_wellness_feature_engineered.csv"
+OUTPUT_PATH_NO_EMB = (
+    PROJECT_ROOT
+    / "dataset"
+    / "health_and_wellness_feature_engineered_no_embeddings.csv"
+)
+MODELS_DIR = PROJECT_ROOT / "models"
+PCA_PATH = MODELS_DIR / "name_pca.joblib"
 
 # Default: use region-level shop location instead of province-level.
 USE_REGION = True
@@ -54,6 +63,12 @@ def build_feature_table(
     features["name_length"] = df["Name"].str.len()
     features["name_word_count"] = df["Name"].str.split().str.len().fillna(0).astype(int)
 
+    print("Encoding product names to sentence embeddings...")
+    name_embeddings, _, name_pca = build_name_embeddings(df["Name"])
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    joblib.dump(name_pca, PCA_PATH)
+    print(f"Saved:  {PCA_PATH.name} → {PCA_PATH.parent.name}/")
+
     categorical_df = pd.DataFrame(
         {
             "section": df["Section"].map(clean_category_value),
@@ -75,20 +90,33 @@ def build_feature_table(
         dtype=int,
     )
 
-    feature_df = pd.concat([features, dummy_features], axis=1)
+    feature_df = pd.concat([features, name_embeddings, dummy_features], axis=1)
     feature_df = feature_df.replace([np.inf, -np.inf], np.nan).fillna(0)
     return feature_df
 
 
+def drop_embedding_columns(feature_df: pd.DataFrame) -> pd.DataFrame:
+    """Return the same feature table without the sentence-embedding columns."""
+    emb_cols = [c for c in feature_df.columns if c.startswith("name_semantic_pca_")]
+    return feature_df.drop(columns=emb_cols)
+
+
 def run_feature_engineer() -> pd.DataFrame:
-    """Load the cleaned table, engineer features, and save the modeling table."""
+    """Load the cleaned table, engineer features, and save both modeling tables."""
     raw_df = pd.read_csv(INPUT_PATH)
     feature_df = build_feature_table(raw_df)
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     feature_df.to_csv(OUTPUT_PATH, index=False)
 
+    feature_df_no_emb = drop_embedding_columns(feature_df)
+    feature_df_no_emb.to_csv(OUTPUT_PATH_NO_EMB, index=False)
+
     print(f"Engineered: {feature_df.shape[0]:,} rows × {feature_df.shape[1]:,} cols")
     print(f"Saved:      {OUTPUT_PATH.name} → dataset/")
+    print(
+        f"Saved:      {OUTPUT_PATH_NO_EMB.name} → dataset/ "
+        f"({feature_df_no_emb.shape[1]:,} cols)"
+    )
     print(f"Target:     {TARGET_COLUMN}, seed={RANDOM_STATE}")
     return feature_df
 

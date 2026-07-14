@@ -35,7 +35,9 @@ def select_features(
         min_features_to_select=min_features,
         cv=cv_splitter,
         scoring="neg_mean_squared_error",
-        n_jobs=-1,
+        # ponytail: n_jobs=1 because torch/sentence-transformers threading plus
+        # RFECV parallelism caused intermittent segfaults on macOS with 60 features.
+        n_jobs=1,
     )
     selector.fit(X_train, y_train)
     mask = selector.get_support()

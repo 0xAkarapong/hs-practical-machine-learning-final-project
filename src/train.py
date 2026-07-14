@@ -73,7 +73,9 @@ def train_xgboost(
         max_depth=5,
         learning_rate=0.05,
         random_state=seed,
-        n_jobs=-1,
+        # ponytail: n_jobs=1 to avoid multiprocessing clashes with other pipeline
+        # stages after adding sentence-transformers/torch.
+        n_jobs=1,
     )
     model.fit(X_train, y_train)
     return model
