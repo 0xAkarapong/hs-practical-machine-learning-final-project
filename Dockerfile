@@ -13,6 +13,7 @@ RUN uv sync --frozen --no-install-project
 
 # Copy source + data
 COPY main.py ./
+COPY src ./src
 COPY dataset ./dataset
 
 CMD ["python", "main.py"]
