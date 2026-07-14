@@ -15,6 +15,10 @@ venv/
 # Generated figures from notebooks
 notebooks/figures/
 
+# Generated train/test splits (reproducible from src/split_data.py + RANDOM_STATE)
+dataset/train.csv
+dataset/test.csv
+
 # OS / editor
 .DS_Store
 .idea/
