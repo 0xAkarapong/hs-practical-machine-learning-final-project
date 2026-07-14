@@ -8,15 +8,10 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyRegressor
-from sklearn.metrics import (
-    mean_absolute_error,
-    mean_squared_error,
-    r2_score,
-)
 
+from src.metrics import evaluate_model
 from src.split_data import TARGET_COLUMN, TEST_PATH, TRAIN_PATH
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -30,24 +25,6 @@ GRIDLINE = "#e1e0d9"
 BLUE = "#2a78d6"
 CORAL = "#e07850"
 GRAY = "#9a9995"
-
-
-def _evaluate(model, X_test, y_test) -> dict[str, float]:
-    preds_log = model.predict(X_test)
-    rmse_log = float(np.sqrt(mean_squared_error(y_test, preds_log)))
-    mae_log = float(mean_absolute_error(y_test, preds_log))
-    r2_log = float(r2_score(y_test, preds_log))
-    y_test_thb = np.expm1(y_test.to_numpy())
-    preds_thb = np.expm1(preds_log)
-    rmse_thb = float(np.sqrt(np.mean((y_test_thb - preds_thb) ** 2)))
-    mae_thb = float(np.mean(np.abs(y_test_thb - preds_thb)))
-    return {
-        "rmse_log": rmse_log,
-        "mae_log": mae_log,
-        "r2_log": r2_log,
-        "rmse_thb": rmse_thb,
-        "mae_thb": mae_thb,
-    }
 
 
 def _load_models() -> tuple[DummyRegressor, object, object, list[str]]:
@@ -143,9 +120,9 @@ def run_compare_baseline() -> dict[str, dict[str, float]]:
     y_test = test_table[TARGET_COLUMN]
     X_test_selected = X_test[selected]
 
-    baseline_metrics = _evaluate(baseline, X_test, y_test)
-    gbdt_metrics = _evaluate(gbdt, X_test_selected, y_test)
-    xgb_metrics = _evaluate(xgb, X_test_selected, y_test)
+    baseline_metrics = evaluate_model(baseline, X_test, y_test)
+    gbdt_metrics = evaluate_model(gbdt, X_test_selected, y_test)
+    xgb_metrics = evaluate_model(xgb, X_test_selected, y_test)
 
     print("Baseline metrics:")
     for key, value in baseline_metrics.items():

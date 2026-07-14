@@ -11,10 +11,10 @@ import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from xgboost import XGBRegressor
 
 from src.feature_selection import select_features
+from src.metrics import evaluate_model
 from src.split_data import RANDOM_STATE, TARGET_COLUMN, split_data
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -36,25 +36,6 @@ AQUA = "#1baf7a"
 CORAL = "#e07850"
 
 
-def _evaluate(model, X_test, y_test) -> dict[str, float]:
-    preds_log = model.predict(X_test)
-    rmse_log = float(np.sqrt(mean_squared_error(y_test, preds_log)))
-    mae_log = float(mean_absolute_error(y_test, preds_log))
-    r2_log = float(r2_score(y_test, preds_log))
-    y_test_thb = np.expm1(y_test.to_numpy())
-    preds_thb = np.expm1(preds_log)
-    rmse_thb = float(np.sqrt(np.mean((y_test_thb - preds_thb) ** 2)))
-    mae_thb = float(np.mean(np.abs(y_test_thb - preds_thb)))
-    return {
-        "rmse_log": rmse_log,
-        "mae_log": mae_log,
-        "r2_log": r2_log,
-        "rmse_thb": rmse_thb,
-        "mae_thb": mae_thb,
-        "features": X_test.shape[1],
-    }
-
-
 def _train_and_eval(feature_table: pd.DataFrame, label: str, use_emb: bool):
     train_table, test_table = split_data(feature_table)
     X_train = train_table.drop(columns=TARGET_COLUMN)
@@ -63,7 +44,7 @@ def _train_and_eval(feature_table: pd.DataFrame, label: str, use_emb: bool):
     y_test = test_table[TARGET_COLUMN]
 
     baseline = DummyRegressor(strategy="mean").fit(X_train, y_train)
-    baseline_metrics = _evaluate(baseline, X_test, y_test)
+    baseline_metrics = evaluate_model(baseline, X_test, y_test, include_features=True)
 
     if use_emb:
         selected_columns = json.loads(SELECTED_PATH.read_text())
@@ -83,8 +64,8 @@ def _train_and_eval(feature_table: pd.DataFrame, label: str, use_emb: bool):
         n_jobs=1,
     ).fit(X_train, y_train)
 
-    gbdt_metrics = _evaluate(gbdt, X_test, y_test)
-    xgb_metrics = _evaluate(xgb, X_test, y_test)
+    gbdt_metrics = evaluate_model(gbdt, X_test, y_test, include_features=True)
+    xgb_metrics = evaluate_model(xgb, X_test, y_test, include_features=True)
     print(
         f"{label}: {gbdt_metrics['features']} features, "
         f"GBDT R²={gbdt_metrics['r2_log']:.4f}, "

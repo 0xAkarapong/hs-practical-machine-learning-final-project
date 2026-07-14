@@ -11,7 +11,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from src.feature_engineer import build_feature_table
+from src.feature_engineer import PCA_PATH, build_predict_table
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODELS_DIR = PROJECT_ROOT / "models"
@@ -28,22 +28,21 @@ def predict_prices(raw_df: pd.DataFrame) -> pd.Series:
     The `Price` column is ignored for prediction; it is only kept because the
     feature-engineering function expects the raw schema.
 
-    ponytail: this is the minimal outcome entry point. It reuses the exact same
-    feature-engineering logic as training so predictions are consistent. The
-    selected-feature list and the XGBoost model are loaded from `models/`.
+    ponytail: minimal outcome entry point. Reuses the fitted PCA from
+    models/name_pca.joblib (transform, not refit) so train/predict share one basis,
+    skips the unknown target column, and hits the embedding cache on repeat runs.
+    The feature matrix is reindexed to the exact selected-feature set the model was
+    trained on (absent one-hot columns fill with 0 — correct for one-hot absence).
     """
     if "Price" not in raw_df.columns:
         raw_df = raw_df.copy()
         raw_df["Price"] = 0.0
 
-    feature_table = build_feature_table(raw_df)
-    X = feature_table.drop(columns=["log_price_thb"])
+    pca = joblib.load(PCA_PATH)
+    feature_table = build_predict_table(raw_df, pca=pca)
 
     selected_features = json.loads(SELECTED_FEATURES_PATH.read_text())
-    missing = [f for f in selected_features if f not in X.columns]
-    if missing:
-        raise ValueError(f"Selected features missing from input: {missing}")
-    X = X[selected_features]
+    X = feature_table.reindex(columns=selected_features, fill_value=0)
 
     model = joblib.load(XGB_MODEL_PATH)
     log_predictions = model.predict(X)

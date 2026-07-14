@@ -1,5 +1,6 @@
 """Compare GBDT vs XGBoost on the region-level selected feature set."""
 
+import json
 from pathlib import Path
 
 import joblib
@@ -10,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from src.metrics import evaluate_model
 from src.split_data import TARGET_COLUMN, TEST_PATH
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -31,13 +33,7 @@ def _load_metrics(model_path: Path):
     y_test = test_table[TARGET_COLUMN]
     selected = json.loads((MODELS_DIR / "selected_features.json").read_text())
     X_test = X_test[selected]
-    preds = model.predict(X_test)
-    rmse_log = float(np.sqrt(np.mean((y_test.to_numpy() - preds) ** 2)))
-    mae_log = float(np.mean(np.abs(y_test.to_numpy() - preds)))
-    ss_res = float(np.sum((y_test.to_numpy() - preds) ** 2))
-    ss_tot = float(np.sum((y_test.to_numpy() - y_test.mean()) ** 2))
-    r2_log = 1 - ss_res / ss_tot
-    return {"r2_log": r2_log, "rmse_log": rmse_log, "mae_log": mae_log}
+    return evaluate_model(model, X_test, y_test)
 
 
 def _plot(metrics: dict[str, dict[str, float]], save_path: Path) -> Path:
@@ -115,6 +111,4 @@ def run_compare_gbdt_xgboost() -> dict[str, dict[str, float]]:
 
 
 if __name__ == "__main__":
-    import json
-
     run_compare_gbdt_xgboost()

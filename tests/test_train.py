@@ -3,7 +3,8 @@ import pandas as pd
 
 from src.baseline import train_baseline
 from src.feature_selection import select_features
-from src.train import evaluate_model, plot_result, train_gbdt
+from src.metrics import cross_val_metrics, evaluate_model
+from src.train import plot_result, train_gbdt
 
 
 def test_train_and_evaluate_produces_finite_metrics():
@@ -36,6 +37,20 @@ def test_train_and_evaluate_produces_finite_metrics():
     # The model uses informative features; it must beat the mean-predictor.
     assert metrics["r2_log"] > baseline_metrics["r2_log"]
     assert metrics["rmse_log"] < baseline_metrics["rmse_log"]
+
+
+def test_cross_val_metrics_returns_finite_mean_std():
+    # ponytail: self-check that cross_val_metrics gives finite mean±std on a
+    # synthetic linear target — the smallest thing that fails if the CV loop breaks.
+    rng = np.random.default_rng(3)
+    X = pd.DataFrame(rng.normal(size=(150, 3)), columns=["a", "b", "c"])
+    y = pd.Series(X["a"] * 2.0 + rng.normal(scale=0.1, size=150), name="log_price_thb")
+
+    cv = cross_val_metrics(train_gbdt(X, y), X, y, k=5)
+
+    assert cv["k"] == 5
+    for key in ("r2_log_mean", "r2_log_std", "rmse_log_mean", "rmse_log_std"):
+        assert np.isfinite(cv[key])
 
 
 def test_select_features_keeps_a_subset():

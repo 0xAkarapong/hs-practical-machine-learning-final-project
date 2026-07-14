@@ -10,17 +10,14 @@ matplotlib.use("Agg")  # headless backend — safe inside the Docker container
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from xgboost import XGBRegressor
 
 from src.baseline import train_baseline
 from src.feature_selection import select_features
 from src.interpret import run_interpret
+from src.metrics import cross_val_metrics, evaluate_model, save_metrics, time_stage
 from src.split_data import RANDOM_STATE, TARGET_COLUMN, TEST_PATH, TRAIN_PATH
-
-Regressor = GradientBoostingRegressor | XGBRegressor | DummyRegressor
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"
@@ -79,34 +76,6 @@ def train_xgboost(
     )
     model.fit(X_train, y_train)
     return model
-
-
-def evaluate_model(
-    model: Regressor, X_test: pd.DataFrame, y_test: pd.Series
-) -> dict[str, float]:
-    """Return RMSE/MAE/R² in log space and in THB (expm1 of the log target).
-
-    ponytail: report both spaces — the model fits log_price_thb, but THB is
-    the unit the business reads. expm1 inverts the log1p transform applied
-    during feature engineering.
-    """
-    preds_log = model.predict(X_test)
-    rmse_log = float(np.sqrt(mean_squared_error(y_test, preds_log)))
-    mae_log = float(mean_absolute_error(y_test, preds_log))
-    r2_log = float(r2_score(y_test, preds_log))
-
-    y_test_thb = np.expm1(y_test.to_numpy())
-    preds_thb = np.expm1(preds_log)
-    rmse_thb = float(np.sqrt(np.mean((y_test_thb - preds_thb) ** 2)))
-    mae_thb = float(np.mean(np.abs(y_test_thb - preds_thb)))
-
-    return {
-        "rmse_log": rmse_log,
-        "mae_log": mae_log,
-        "r2_log": r2_log,
-        "rmse_thb": rmse_thb,
-        "mae_thb": mae_thb,
-    }
 
 
 def plot_result(
@@ -178,15 +147,26 @@ def _fit_and_report(
     model_path: Path,
     figure_path: Path,
     baseline_metrics: dict[str, float],
-) -> dict[str, float]:
-    """Fit one model, report metrics, save artifact and plot."""
+) -> dict:
+    """Fit one model, report CV + held-out metrics, save artifact and plot."""
     print(f"Fitting {model_name} on {X_train.shape[1]} features...")
-    if model_name == "XGBRegressor":
-        model = train_xgboost(X_train, y_train)
-    else:
-        model = train_gbdt(X_train, y_train)
+    with time_stage(f"fit {model_name}"):
+        if model_name == "XGBRegressor":
+            model = train_xgboost(X_train, y_train)
+        else:
+            model = train_gbdt(X_train, y_train)
+
+    # ponytail: cross_val_metrics clones the estimator per fold, so passing the
+    # fitted model is safe. Quantifies the variance the single held-out set hides.
+    with time_stage(f"CV {model_name}"):
+        cv = cross_val_metrics(model, X_train, y_train)
+    print(
+        f"  CV R²(log): {cv['r2_log_mean']:.4f} ± {cv['r2_log_std']:.4f}"
+        f"  RMSE(log): {cv['rmse_log_mean']:.4f} ± {cv['rmse_log_std']:.4f}"
+    )
 
     metrics = evaluate_model(model, X_test, y_test)
+    metrics["cv"] = cv
     joblib.dump(model, model_path)
 
     print(f"Saved:  {model_path.name} → {model_path.parent.name}/")
@@ -243,7 +223,8 @@ def run_train() -> dict[str, dict[str, float]]:
     )
 
     print(f"Selecting features via RFECV wrapper from {X_train.shape[1]} features...")
-    selected_columns = select_features(X_train, y_train)
+    with time_stage("RFECV feature selection"):
+        selected_columns = select_features(X_train, y_train)
     X_train = X_train[selected_columns]
     X_test = X_test[selected_columns]
     print(f"Kept:   {len(selected_columns)} features after wrapper selection")
@@ -283,6 +264,14 @@ def run_train() -> dict[str, dict[str, float]]:
     print("Interpreting GBDT with SHAP...")
     run_interpret()
 
+    all_metrics = {
+        "baseline": baseline_metrics,
+        "gbdt": gbdt_metrics,
+        "xgboost": xgb_metrics,
+        "selected_features": selected_columns,
+    }
+    metrics_path = save_metrics(all_metrics)
+    print(f"Saved:  {metrics_path.name} → {metrics_path.parent.name}/")
     return {"gbdt": gbdt_metrics, "xgboost": xgb_metrics}
 
 
