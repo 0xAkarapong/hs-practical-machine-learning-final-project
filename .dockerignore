@@ -11,3 +11,9 @@ notebooks
 *.egg-info
 dist/
 build/
+
+# Generated data artifacts
+dataset/predictions.csv
+dataset/train.csv
+dataset/test.csv
+models/
