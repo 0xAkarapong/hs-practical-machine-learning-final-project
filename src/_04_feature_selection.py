@@ -8,7 +8,7 @@ from sklearn.feature_selection import RFECV
 from sklearn.linear_model import RidgeCV
 from sklearn.model_selection import KFold
 
-from src.split_data import RANDOM_STATE, TARGET_COLUMN, TRAIN_PATH
+from src._03_split_data import RANDOM_STATE, TARGET_COLUMN, TRAIN_PATH
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"

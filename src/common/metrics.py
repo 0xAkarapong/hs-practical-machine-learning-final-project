@@ -17,7 +17,7 @@ from sklearn.base import clone
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import KFold
 
-from src.split_data import RANDOM_STATE
+from src._03_split_data import RANDOM_STATE
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 METRICS_PATH = PROJECT_ROOT / "models" / "metrics.json"

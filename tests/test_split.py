@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from src.split_data import split_data
+from src._03_split_data import split_data
 
 
 def test_split_partitions_without_overlap():

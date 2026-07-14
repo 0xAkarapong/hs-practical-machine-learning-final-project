@@ -16,7 +16,7 @@ import pandas as pd
 from sentence_transformers import SentenceTransformer
 from sklearn.decomposition import PCA
 
-from src.split_data import RANDOM_STATE
+from src._03_split_data import RANDOM_STATE
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = PROJECT_ROOT / "models"
