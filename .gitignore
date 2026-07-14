@@ -19,6 +19,9 @@ notebooks/figures/
 dataset/train.csv
 dataset/test.csv
 
+# Generated model artifacts (reproducible from src/train.py + RANDOM_STATE)
+models/
+
 # OS / editor
 .DS_Store
 .idea/
