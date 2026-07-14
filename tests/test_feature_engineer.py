@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.feature_engineer import add_interaction_features
+from src._02_feature_engineer import add_interaction_features
 
 
 def test_add_interaction_features_adds_one_column_per_section():

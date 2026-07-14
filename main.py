@@ -1,12 +1,14 @@
 """Entry point for the health & wellness price-recommendation pipeline."""
 
-from src.compare_baseline import run_compare_baseline
-from src.feature_engineer import run_feature_engineer
-from src.split_data import run_split
-from src.train import run_train
+from src._01_clean_data import run_clean_data
+from src.comparisons.baseline import run_compare_baseline
+from src._02_feature_engineer import run_feature_engineer
+from src._03_split_data import run_split
+from src._06_train import run_train
 
 
 def main():
+    run_clean_data()
     run_feature_engineer()
     run_split()
     run_train()

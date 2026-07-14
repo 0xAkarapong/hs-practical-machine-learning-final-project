@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from src.metrics import evaluate_model
-from src.split_data import TARGET_COLUMN, TEST_PATH
+from src.common.metrics import evaluate_model
+from src._03_split_data import TARGET_COLUMN, TEST_PATH
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FIGURES_DIR = PROJECT_ROOT / "notebooks" / "figures"

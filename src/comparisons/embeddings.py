@@ -13,9 +13,9 @@ from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import GradientBoostingRegressor
 from xgboost import XGBRegressor
 
-from src.feature_selection import select_features
-from src.metrics import evaluate_model
-from src.split_data import RANDOM_STATE, TARGET_COLUMN, split_data
+from src._04_feature_selection import select_features
+from src.common.metrics import evaluate_model
+from src._03_split_data import RANDOM_STATE, TARGET_COLUMN, split_data
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FEATURE_PATH = PROJECT_ROOT / "dataset" / "health_and_wellness_feature_engineered.csv"

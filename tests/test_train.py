@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
 
-from src.baseline import train_baseline
-from src.feature_selection import select_features
-from src.metrics import cross_val_metrics, evaluate_model
-from src.train import plot_result, train_gbdt
+from src._05_baseline import train_baseline
+from src._04_feature_selection import select_features
+from src.common.metrics import cross_val_metrics, evaluate_model
+from src._06_train import plot_result, train_gbdt
 
 
 def test_train_and_evaluate_produces_finite_metrics():

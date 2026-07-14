@@ -7,9 +7,9 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from src.embeddings import EMBEDDING_DIM, build_name_embeddings
-from src.regions import PROVINCE_TO_REGION
-from src.split_data import RANDOM_STATE, TARGET_COLUMN
+from src.common.embeddings import EMBEDDING_DIM, build_name_embeddings
+from src.common.regions import PROVINCE_TO_REGION
+from src._03_split_data import RANDOM_STATE, TARGET_COLUMN
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 INPUT_PATH = PROJECT_ROOT / "dataset" / "health_and_wellness_no_outliers.csv"

@@ -13,9 +13,9 @@ from sklearn.feature_selection import RFECV
 from sklearn.linear_model import RidgeCV
 from sklearn.model_selection import KFold
 
-from src.feature_engineer import OUTPUT_PATH, build_feature_table
-from src.metrics import evaluate_model
-from src.split_data import RANDOM_STATE, TARGET_COLUMN
+from src._02_feature_engineer import OUTPUT_PATH, build_feature_table
+from src.common.metrics import evaluate_model
+from src._03_split_data import RANDOM_STATE, TARGET_COLUMN
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RAW_PATH = PROJECT_ROOT / "dataset" / "health_and_wellness_no_outliers.csv"
@@ -46,8 +46,8 @@ def _select_features(X_train, y_train) -> list[str]:
 
 
 def _split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Reproduce the stratified split from src.split_data on any feature table."""
-    from src.split_data import split_data
+    """Reproduce the stratified split from src._03_split_data on any feature table."""
+    from src._03_split_data import split_data
 
     return split_data(df)
 
