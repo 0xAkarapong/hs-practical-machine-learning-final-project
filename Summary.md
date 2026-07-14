@@ -185,16 +185,19 @@ uv run python main.py   # train + evaluate + interpret + compare
 uv run python predict.py # generate predictions.csv from the raw table
 ```
 
-Final model: **name-embedding + region-level XGBRegressor** on 73 selected features.
+Final model: **name-embedding + region-level XGBRegressor** on 73 selected features — the
+tuned XGBoost has been promoted to `models/xgboost.joblib` (n_estimators 300, max_depth 7,
+learning_rate 0.05; the fixed-default model that `main.py` retrained is preserved as
+`models/tuned_xgboost.joblib`'s source).
 
 | Metric | Value |
 |---|---:|
-| R² (log) | 0.2994 |
-| RMSE (log) | 0.8141 |
-| MAE (log) | 0.6363 |
-| RMSE (THB) | 577.78 |
-| MAE (THB) | 301.77 |
-| CV R² (log) | 0.2676 ± 0.0310 |
+| R² (log) | 0.3949 |
+| RMSE (log) | 0.7566 |
+| MAE (log) | 0.5691 |
+| RMSE (THB) | 548.77 |
+| MAE (THB) | 276.30 |
+| CV R² (log) | 0.3450 ± 0.0402 |
 
 Prediction script: `predict.py` loads `models/xgboost.joblib` and `models/name_pca.joblib`, transforms a raw listing (`Name`, `Section`, `Shop Location`, `Total Reviews`) the same way as training, and returns predicted THB prices in `dataset/predictions.csv`.
 
@@ -230,16 +233,21 @@ tuning capability with `uv run python -m src.tune`; results are written to `mode
 | HistGradientBoosting | 0.3488 | 551.29 | 0.3349 ± 0.0464 |
 | RandomForest | 0.3635 | 559.79 | 0.3192 ± 0.0317 |
 
-All four tuned candidates are **clear winners** over the deployed XGBoost (each ΔR² ≥ +0.049).
+All four tuned candidates are **clear winners** over the fixed-default XGBoost (each ΔR² ≥ +0.049).
 Switching the encoder to `paraphrase-multilingual-mpnet-base-v2` (768-dim raw, multilingual
-incl. Thai) lifted every model vs the prior MiniLM run — the deployed XGBoost went
-0.2784 → 0.2994 and the best candidate 0.3381 → 0.3949. With mpnet, **tuned XGBoost is now the
-top candidate** on held-out R² (ΔR² +0.096 vs deployed) — note its held-out (0.3949) runs
-above its CV mean (0.3450±0.0402), so some held-out optimism; RandomForest is a close second
-with a tighter CV spread (0.3192 ± 0.0317). Neither is auto-promoted. To promote:
-`cp models/tuned_xgboost.joblib models/xgboost.joblib` and re-run `predict.py` (selected-features
-list and PCA are unchanged within this run). The `n_jobs=1` ceiling makes the RF search the
-slowest stage (~360s); it is the natural candidate for subprocess-isolated parallelism next.
+incl. Thai) lifted every model vs the prior MiniLM run — the fixed-default XGBoost went
+0.2784 → 0.2994 and the best candidate 0.3381 → 0.3949. With mpnet, **tuned XGBoost is the top
+candidate** on held-out R² (ΔR² +0.096 vs the fixed-default model) — note its held-out (0.3949)
+runs above its CV mean (0.3450±0.0402), so some held-out optimism; RandomForest is a close second
+with a tighter CV spread (0.3192 ± 0.0317).
+
+**Promoted.** The tuned XGBoost has been copied to `models/xgboost.joblib` and verified on the
+held-out test (held R² 0.3949, RMSE(THB) 548.77, CV 0.3450 ± 0.0402) — it is now the deployed
+model. Caveat: `main.py` still retrains the **fixed-default** XGBoost and would overwrite the
+promoted model, so do not re-run `main.py` without re-promoting
+(`cp models/tuned_xgboost.joblib models/xgboost.joblib`). The `n_jobs=1` ceiling makes the RF
+search the slowest stage (~360s); it is the natural candidate for subprocess-isolated
+parallelism next.
 
 ## What drives the price
 
@@ -250,11 +258,13 @@ slowest stage (~360s); it is the natural candidate for subprocess-isolated paral
 
 ## Next steps (not done)
 
-- Promote the tuned XGBoost (`models/tuned_xgboost.joblib`, held R² 0.3949) over the deployed model
-  once the uplift is confirmed on fresh data — capability exists, swap is opt-in (see Performance work).
-  RandomForest (`held R² 0.3635`, tighter CV) is a more conservative alternative.
+- Confirm the promoted tuned XGBoost (held R² 0.3949) on fresh data before trusting the uplift;
+  RandomForest (`held R² 0.3635`, tighter CV 0.3192 ± 0.0317) is a more conservative alternative if
+  the tuned model's held-out optimism (0.3949 vs CV 0.3450) doesn't hold.
 - Try a Thai-specific sentence encoder (mpnet is multilingual but not Thai-trained; a Thai SBERT
   model may capture local phrasing better — a different encoder auto-invalidates the embedding cache).
 - Add text-derived features (dosage/quantity, brand, keyword flags like ของแท้/premium) the embeddings miss.
 - Reclaim joblib parallelism for the tuning search via subprocess isolation (the `n_jobs=1` ceiling
   is deliberate — avoids the torch/joblib segfault on macOS; see `src/embeddings.py`).
+- Avoid re-running `main.py` without re-promoting — it retrains the fixed-default XGBoost and
+  overwrites `models/xgboost.joblib` (see Performance work).
