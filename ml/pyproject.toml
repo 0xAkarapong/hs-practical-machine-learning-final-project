@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"   # ponytail: pin 3.13 — CPU index's newest cp313 torch is 2.13.0+cpu (zero skew vs mac PyPI 2.13.0); cp314 CPU tops out at 2.9.1+cpu (big skew), and PyPI cp314 torch pulls ~2-3GB nvidia CUDA pkgs into the image
 dependencies = [
+    "fastapi>=0.115",   # ponytail: thin HTTP bridge for the Next.js frontend
     "matplotlib>=3.11.0",
     "pandas>=3.0.3",
     "scikit-learn>=1.9.0",
@@ -14,6 +15,7 @@ dependencies = [
     # torch listed explicitly (not just transitive via sentence-transformers) so
     # [tool.uv.sources] binds it -> CPU wheel on linux, PyPI (MPS) on mac.
     "torch>=2.6.0",
+    "uvicorn>=0.30",   # ASGI server for api.py
     "xgboost>=3.3.0",
 ]
 

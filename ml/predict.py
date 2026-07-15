@@ -23,7 +23,7 @@ DEFAULT_INPUT = PROJECT_ROOT / "dataset" / "health_and_wellness_no_outliers.csv"
 DEFAULT_OUTPUT = PROJECT_ROOT / "dataset" / "predictions.csv"
 
 
-def predict_prices(raw_df: pd.DataFrame) -> pd.Series:
+def predict_prices(raw_df: pd.DataFrame, encoder: object | None = None) -> pd.Series:
     """Return predicted THB prices for a raw product listing table.
 
     The input DataFrame must contain the same columns as the cleaned raw table:
@@ -36,13 +36,17 @@ def predict_prices(raw_df: pd.DataFrame) -> pd.Series:
     skips the unknown target column, and hits the embedding cache on repeat runs.
     The feature matrix is reindexed to the exact selected-feature set the model was
     trained on (absent one-hot columns fill with 0 — correct for one-hot absence).
+
+    ponytail: `encoder` lets a long-lived caller (api.py) pass a resident
+    SentenceTransformer so per-request listings don't reload the model. Default
+    None builds + tears down its own (the batch CLI path).
     """
     if "Price" not in raw_df.columns:
         raw_df = raw_df.copy()
         raw_df["Price"] = 0.0
 
     pca = joblib.load(PCA_PATH)
-    feature_table = build_predict_table(raw_df, pca=pca)
+    feature_table = build_predict_table(raw_df, pca=pca, encoder=encoder)
 
     selected_features = json.loads(SELECTED_FEATURES_PATH.read_text())
     X = feature_table.reindex(columns=selected_features, fill_value=0)
