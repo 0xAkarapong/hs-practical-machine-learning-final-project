@@ -53,7 +53,15 @@ jobs:
       - run: uv sync --frozen --group dev --group notebooks
       - run: uv run pytest
       - name: Execute notebooks (smoke test)
-        run: uv run jupyter nbconvert --to notebook --execute --output-dir=/tmp/nbexec --ExecutePreprocessor.timeout=300 notebooks/*.ipynb
+        # Globs are expanded by the shell; notebooks run in lexical order (01 → 02 → 03).
+        run: |
+          mkdir -p /tmp/nbexec
+          uv run jupyter nbconvert \
+            --to notebook \
+            --execute \
+            --output-dir=/tmp/nbexec \
+            --ExecutePreprocessor.timeout=300 \
+            notebooks/*.ipynb
 
   web:
     runs-on: ubuntu-latest
@@ -70,3 +78,20 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  # Lightweight container checks: full hs-ml image bakes ~1GB e5 and is too
+  # heavy for every PR. Validate compose + the slim Next image only.
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker compose file
+        run: docker compose config --quiet
+      - name: Build web image
+        run: docker build -t hs-web:ci ./web
+      - name: Assert standalone server.js entrypoint
+        run: |
+          id=$(docker create hs-web:ci)
+          docker cp "$id:/app/server.js" /tmp/web-server.js
+          docker rm "$id"
+          test -s /tmp/web-server.js

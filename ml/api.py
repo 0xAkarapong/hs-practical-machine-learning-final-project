@@ -13,7 +13,6 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-import joblib
 import pandas as pd
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -30,11 +29,30 @@ RAW_TABLE_PATH = PROJECT_ROOT / "dataset" / "health_and_wellness_no_outliers.csv
 SAMPLE_INPUT_PATH = PROJECT_ROOT / "dataset" / "sample_input.csv"
 _CACHE_DIR = Path.home() / ".cache" / "sentence_transformers"
 
-# Load once at import so every request is warm. If the models are missing (e.g.
-# the volume isn't populated / pipeline hasn't trained), the import fails loudly —
-# which is the correct signal for `uvicorn api:app`.
-_PCA = joblib.load(PCA_PATH)
-_MODEL = joblib.load(XGB_MODEL_PATH)
+
+def _require_path(path: Path, hint: str) -> Path:
+    """Fail fast with an actionable message when volume artifacts are missing."""
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Missing required artifact: {path}\n"
+            f"{hint}\n"
+            "  Local:  cd ml && uv run python main.py\n"
+            "  Docker: docker compose up pipeline   # or: make train"
+        )
+    return path
+
+
+# Fail fast if volume artifacts are missing (empty models volume / no train yet),
+# then load the sentence encoder once so every request is warm. predict_prices
+# still loads PCA + XGBoost per call (small joblib files); the e5 encoder is the
+# expensive resident dependency.
+_require_path(PCA_PATH, "Fitted name-embedding PCA not found.")
+_require_path(XGB_MODEL_PATH, "Trained XGBoost model not found.")
+_require_path(METRICS_PATH, "metrics.json not found (written by the train step).")
+_require_path(
+    RAW_TABLE_PATH,
+    "Cleaned raw table not found (written by the clean step / pipeline).",
+)
 _ENCODER = SentenceTransformer(MODEL_NAME, cache_folder=str(_CACHE_DIR))
 
 app = FastAPI(title="Health & Wellness Price API", version="0.1.0")

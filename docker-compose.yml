@@ -2,9 +2,11 @@
 # bridge, and the Next.js frontend. The `api` + `pipeline` services share one
 # image (hs-ml:latest) built from ./ml; `web` is the Next standalone image.
 #
-# First-time use: run `docker compose up pipeline` once to train models into the
-# `models` volume, then `docker compose up api web` to serve. (Re-run `pipeline`
-# whenever ml/ source changes to refresh the persisted models.)
+# First-time use:
+#   docker compose up pipeline    # train into the models volume
+#   docker compose up api web     # serve API :8000 + frontend :3000
+# Do NOT bare `docker compose up` before training — api imports models at startup.
+# Re-run `pipeline` whenever ml/ source changes to refresh persisted models.
 services:
   pipeline:
     build: ./ml
@@ -27,6 +29,19 @@ services:
     volumes:
       - models:/app/models:ro
       - dataset:/app/dataset:ro
+    healthcheck:
+      # Encoder + models load at import; allow a long start window before failing.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
     restart: unless-stopped
 
   web:
@@ -34,9 +49,11 @@ services:
     ports:
       - "3000:3000"
     environment:
+      # Runtime only (see web/lib/api-proxy.ts). Not baked at image build time.
       API_URL: http://api:8000
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

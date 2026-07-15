@@ -1,0 +1,18 @@
+# Keep the build context small and prevent host artifacts from overwriting
+# the Alpine node_modules installed by `npm ci` in the deps stage.
+node_modules
+.next
+out
+build
+coverage
+.git
+.gitignore
+.env*
+*.md
+*.log
+.DS_Store
+.vscode
+.idea
+AGENTS.md
+CLAUDE.md
+eslint.config.mjs

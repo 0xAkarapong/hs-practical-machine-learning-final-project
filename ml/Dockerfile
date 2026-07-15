@@ -50,9 +50,13 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /root/.cache/sentence_transformers /root/.cache/sentence_transformers
 
-# Copy source + data
+# Copy source + data (generated artifacts like models/ and no_outliers are
+# dockerignored and produced into named volumes by the pipeline service).
 COPY main.py predict.py api.py ./
 COPY src ./src
 COPY dataset ./dataset
+
+# Ensure mount points exist so empty named volumes don't obscure write paths.
+RUN mkdir -p /app/models /app/notebooks/figures
 
 CMD ["python", "main.py"]

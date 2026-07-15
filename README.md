@@ -34,17 +34,20 @@ persisted models the `api` service loads.
 
 ## Quickstart — local dev (no Docker)
 
-Two terminals:
+Two terminals (API needs trained artifacts in `ml/models/` first —
+`cd ml && uv run python main.py` if empty):
 
 ```bash
 # 1) API bridge (loads the trained models in ml/models/)
 cd ml && uv sync && uv run uvicorn api:app --reload --port 8000
 
-# 2) frontend (proxies to http://localhost:8000 via web/.env.local)
-cd web && npm install && npm run dev
+# 2) frontend (proxies to http://localhost:8000)
+cd web && cp -n .env.example .env.local  # once; safe no-op if already present
+npm install && npm run dev
 ```
 
-The frontend defaults `API_URL=http://localhost:8000` (see `web/.env.local`).
+The frontend reads `API_URL` (default `http://localhost:8000`) from the
+environment or `web/.env.local` — see `web/.env.example`.
 
 ## ML pipeline (local, no Docker)
 

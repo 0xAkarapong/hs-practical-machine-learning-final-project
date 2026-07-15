@@ -1,9 +1,9 @@
 // Tiny proxy so the browser only talks to Next (no CORS on the FastAPI backend).
-// API_URL is read at request time (not module load) so the Docker standalone
-// build picks up the runtime env, not a build-time value.
+// API_URL is read at request time via bracket access so Next does not inline a
+// build-time value; Docker Compose can set API_URL=http://api:8000 at runtime.
 
 function apiUrl(): string {
-  return process.env.API_URL ?? "http://localhost:8000";
+  return process.env["API_URL"] ?? "http://localhost:8000";
 }
 
 async function forward(res: Response): Promise<Response> {
