@@ -19,7 +19,7 @@ from sklearn.model_selection import KFold
 
 from src._03_split_data import RANDOM_STATE
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/common/ -> repo root
 METRICS_PATH = PROJECT_ROOT / "models" / "metrics.json"
 
 

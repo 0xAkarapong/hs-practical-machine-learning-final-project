@@ -14,7 +14,7 @@ import pandas as pd
 from src._03_split_data import TARGET_COLUMN, TEST_PATH
 from src.common.metrics import evaluate_model
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/comparisons/ -> repo root
 FIGURES_DIR = PROJECT_ROOT / "notebooks" / "figures"
 MODELS_DIR = PROJECT_ROOT / "models"
 

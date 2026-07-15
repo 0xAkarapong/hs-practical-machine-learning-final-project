@@ -14,7 +14,7 @@ from sklearn.dummy import DummyRegressor
 from src._03_split_data import TARGET_COLUMN, TEST_PATH, TRAIN_PATH
 from src.common.metrics import evaluate_model
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/comparisons/ -> repo root
 MODELS_DIR = PROJECT_ROOT / "models"
 FIGURES_DIR = PROJECT_ROOT / "notebooks" / "figures"
 

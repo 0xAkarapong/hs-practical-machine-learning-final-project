@@ -7,7 +7,9 @@ services:
     volumes:
       - models:/app/models
       - dataset:/app/dataset
+      - figures:/app/notebooks/figures
 
 volumes:
   models:
   dataset:
+  figures:
