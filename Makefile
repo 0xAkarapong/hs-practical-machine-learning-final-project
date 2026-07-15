@@ -1,12 +1,20 @@
 # Makefile — monorepo control. ML lives in ./ml (uv + docker), frontend in ./web.
 # `docker compose` targets use the root compose file (pipeline + api + web).
 
-.PHONY: help build up train predict predict-file predict-sample shell logs ps metrics figures down clean api api-dev web web-dev
+.PHONY: help build build-ml build-web build-docker up train predict predict-file predict-sample shell logs ps metrics figures down clean api-dev web-dev
 
 help:  ## show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-build:  ## build all images (hs-ml:latest + web)
+build: build-ml build-web  ## local build: install ml deps + build the web app (no Docker)
+
+build-ml:  ## install the ML Python deps into ml/.venv
+	cd ml && uv sync --group dev
+
+build-web:  ## install web deps (npm ci) + production build
+	cd web && npm ci && npm run build
+
+build-docker:  ## build all Docker images (hs-ml:latest + web); bakes the ~1GB e5 model
 	docker compose build
 
 up:  ## build + run api + web (assumes models volume already trained; run `make train` first)

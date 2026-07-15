@@ -59,9 +59,15 @@ uv run pytest                 # tests (needs --group dev)
 
 ## Makefile targets (repo root)
 
-`make help` lists them. Highlights: `make train`, `make up` (api+web),
-`make api-dev` / `make web-dev` (local dev), `make predict-sample`, `make metrics`,
-`make clean` (wipes volumes → forces retrain).
+`make help` lists them. Highlights:
+
+- `make build` — local build of both packages: install ml deps (`uv sync --group dev`)
+  + web production build (`npm ci && npm run build`). No Docker.
+- `make build-docker` — build the Docker images (hs-ml + web; bakes the ~1GB e5 model).
+- `make train` — one-shot train the ML pipeline into the `models` volume.
+- `make up` — build + run `api` + `web` (run `make train` first).
+- `make api-dev` / `make web-dev` — local dev servers (two terminals).
+- `make predict-sample`, `make metrics`, `make clean` (wipes volumes → forces retrain).
 
 ## Notes
 
