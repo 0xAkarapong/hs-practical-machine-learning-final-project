@@ -66,18 +66,26 @@ def train_xgboost(
 ) -> XGBRegressor:
     """Fit an XGBRegressor on the training features/target.
 
-    ponytail: hyperparameters chosen by a small GridSearchCV on the region-level
-    train split (5-fold, neg_mean_squared_error). This setting beats both the
-    default XGBoost and the sklearn GBDT on the held-out test set.
+    ponytail: these ARE the tuned hyperparameters (from src/_08_tune.py
+    RandomizedSearchCV, 5-fold CV) baked in as the deployed config, so a single
+    main.py run reproduces the promoted model — no separate re-promote step.
+    After re-tuning, update these defaults to the new best (single source of
+    truth). _08_tune.py reuses this as the `current_xgb` baseline-to-beat.
     """
     model = XGBRegressor(
-        n_estimators=100,
-        max_depth=5,
+        n_estimators=300,
+        max_depth=7,
         learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_weight=5,
+        reg_lambda=5.0,
+        reg_alpha=0.0,
         random_state=seed,
-        # ponytail: n_jobs=1 to avoid multiprocessing clashes with other pipeline
-        # stages after adding sentence-transformers/torch.
-        n_jobs=1,
+        # ponytail: n_jobs=-1 uses all cores for tree building (in-process threads,
+        # not joblib fork). Safe because the torch encoder is freed before training
+        # and joblib stays n_jobs=1 (no fork) — the macOS segfault was fork+torch.
+        n_jobs=-1,
     )
     model.fit(X_train, y_train)
     return model
