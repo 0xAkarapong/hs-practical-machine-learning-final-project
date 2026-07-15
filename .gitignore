@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual envs
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated figures from notebooks
+ml/notebooks/figures/
+
+# Generated train/test splits (reproducible from ml/src/_03_split_data.py + RANDOM_STATE)
+ml/dataset/train.csv
+ml/dataset/test.csv
+
+# Generated model artifacts (reproducible from ml/src/_06_train.py + RANDOM_STATE)
+ml/models/
+
+# Generated predictions (reproducible from ml/predict.py)
+ml/dataset/predictions.csv
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
