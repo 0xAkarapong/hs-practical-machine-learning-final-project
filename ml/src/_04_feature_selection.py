@@ -24,9 +24,9 @@ def select_features(
 ) -> list[str]:
     """Return the column names selected by RFECV with a tree-based wrapper.
 
-    ponytail: the wrapper estimator matches the final model class so the kept
-    subset optimizes what the tree actually cares about (thresholds, interactions)
-    — a linear RidgeCV wrapper kept 78/82 features, i.e. barely selected, because
+    The wrapper estimator matches the final model class so the kept subset
+    optimizes what the tree actually cares about (thresholds, interactions) — a
+    linear RidgeCV wrapper kept 78/82 features, i.e. barely selected, because
     linear models rarely find a one-hot/embedding feature that *hurts* CV MSE. A
     shallow XGBRegressor (n_estimators=100, max_depth=3) ranks via
     feature_importances_ and prunes by the tree's own CV-MSE. RFECV's internal CV
@@ -46,8 +46,8 @@ def select_features(
         min_features_to_select=min_features,
         cv=cv_splitter,
         scoring="neg_mean_squared_error",
-        # ponytail: n_jobs=1 keeps joblib fork-free (the macOS segfault was
-        # fork+torch). The wrapper's own n_jobs=-1 still parallelizes each fit.
+        # n_jobs=1 keeps joblib fork-free (the macOS segfault was fork+torch).
+        # The wrapper's own n_jobs=-1 still parallelizes each fit.
         n_jobs=1,
     )
     selector.fit(X_train, y_train)

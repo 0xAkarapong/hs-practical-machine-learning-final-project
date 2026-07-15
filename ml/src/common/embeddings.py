@@ -6,12 +6,12 @@ import sys
 import time
 from pathlib import Path
 
-# ponytail: the OMP=1 + n_jobs=1 ceiling exists only because torch threads +
-# joblib *fork* (RFECV/RandomizedSearchCV n_jobs>1) segfault on macOS. On Linux
-# (Docker) there is no fork here (joblib stays n_jobs=1), so multithreading is
-# safe and a big win: force OMP=1 only on macOS; let Linux use all cores for the
-# e5-base encode (the dominant runtime cost). TOKENIZERS_PARALLELISM=false stays
-# on all platforms (avoids fast-tokenizer deadlock/warnings).
+# OMP=1 + n_jobs=1 exists only because torch threads + joblib *fork*
+# (RFECV/RandomizedSearchCV n_jobs>1) segfault on macOS. On Linux (Docker) there
+# is no fork here (joblib stays n_jobs=1), so multithreading is safe and a big
+# win: force OMP=1 only on macOS; let Linux use all cores for the e5-base encode
+# (the dominant runtime cost). TOKENIZERS_PARALLELISM=false stays on all platforms
+# (avoids fast-tokenizer deadlock/warnings).
 if sys.platform == "darwin":
     os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -29,18 +29,18 @@ MODELS_DIR = PROJECT_ROOT / "models"
 EMBEDDING_CACHE_PATH = MODELS_DIR / "name_embeddings.joblib"
 
 MODEL_NAME = "intfloat/multilingual-e5-base"
-# ponytail: production uses 64 PCA components. Env-overridable so an encoder
-# ablation can run at another dim (e.g. EMBEDDING_DIM=32) for apples-to-apples
-# comparison in Summary.md without touching this constant — default stays 64.
+# Production uses 64 PCA components. Env-overridable so an encoder ablation can
+# run at another dim (e.g. EMBEDDING_DIM=32) without touching this constant.
 EMBEDDING_DIM = int(os.environ.get("EMBEDDING_DIM", "64"))
-# ponytail: e5 models REQUIRE a "query: "/"passage: " input prefix, even non-English.
-# The e5 model card says: "Use 'query: ' prefix if you want to use embeddings as
+# e5 models REQUIRE a "query: "/"passage: " input prefix, even non-English. The
+# e5 model card says: "Use 'query: ' prefix if you want to use embeddings as
 # features, such as linear probing classification, clustering." We use the name
-# embeddings as regression features (symmetric), so "query: " is the correct prefix
-# — applied here in the single shared encode path so train + predict stay consistent.
+# embeddings as regression features (symmetric), so "query: " is the correct
+# prefix — applied here in the single shared encode path so train + predict stay
+# consistent.
 E5_PREFIX = "query: "
-# ponytail: cap distinct name-sets cached to avoid unbounded growth. The common
-# case is one name-set (the no_outliers file) shared by training and prediction.
+# Cap distinct name-sets cached to avoid unbounded growth. The common case is
+# one name-set (the no_outliers file) shared by training and prediction.
 EMBEDDING_CACHE_CAP = 8
 
 
@@ -58,18 +58,18 @@ def _cached_raw_embeddings(
 ) -> tuple[np.ndarray, bool]:
     """Return (raw_embeddings, cache_hit). Encode only on a cache miss.
 
-    ponytail: cache keyed on the content hash of the Name series, so repeat
-    main.py / predict.py runs on the same dataset skip the MiniLM encode entirely
-    — the dominant cost. Capped at EMBEDDING_CACHE_CAP distinct name-sets (oldest
-    evicted first via dict insertion order).
+    Cache keyed on the content hash of the Name series, so repeat main.py /
+    predict.py runs on the same dataset skip the e5 encode entirely — the dominant
+    cost. Capped at EMBEDDING_CACHE_CAP distinct name-sets (oldest evicted first
+    via dict insertion order).
 
-    ponytail: `encoder` lets a long-lived caller (the FastAPI server in api.py)
-    pass in a resident SentenceTransformer so a per-request single listing does
-    not reload the ~278M model each cache miss. Default None builds + tears down
-    its own encoder, so the batch train/predict paths are unchanged.
+    `encoder` lets a long-lived caller (the FastAPI server in api.py) pass in a
+    resident SentenceTransformer so a per-request single listing does not reload
+    the ~278M model each cache miss. Default None builds + tears down its own
+    encoder, so the batch train/predict paths are unchanged.
     """
-    # ponytail: include model_name in the cache key so swapping encoders (e.g.
-    # MiniLM → mpnet) re-encodes instead of silently reusing the stale raw vectors.
+    # Include model_name in the cache key so swapping encoders (e.g. e5 → mpnet)
+    # re-encodes instead of silently reusing the stale raw vectors.
     key = f"{model_name}:{_names_key(names)}"
     cache: dict = {}
     if EMBEDDING_CACHE_PATH.exists():
@@ -81,13 +81,13 @@ def _cached_raw_embeddings(
         print(f"  Embedding cache hit (key={key}) — skipping encode")
         return cache[key], True
 
-    # ponytail: reuse an injected encoder; only construct+teardown a local one
-    # when no encoder is supplied (the batch path).
+    # Reuse an injected encoder; only construct + tear down a local one when no
+    # encoder is supplied (the batch path).
     owns_encoder = encoder is None
     if owns_encoder:
         encoder = SentenceTransformer(model_name, cache_folder=str(cache_dir))
-    # ponytail: e5 needs the "query: " prefix on every input (see E5_PREFIX). For
-    # empty names the prefix alone is harmless — encode keeps a fixed dim either way.
+    # e5 needs the "query: " prefix on every input (see E5_PREFIX). For empty
+    # names the prefix alone is harmless — encode keeps a fixed dim either way.
     prefixed = [f"{E5_PREFIX}{n}" for n in names.fillna("").tolist()]
     start = time.perf_counter()
     raw_embeddings = encoder.encode(
@@ -100,10 +100,10 @@ def _cached_raw_embeddings(
         f" ({len(names)} rows, cache miss, key={key})"
     )
 
-    # ponytail: free the torch model + its threads before any downstream
-    # joblib/XGBoost stage so in-process threading is clean and memory is
-    # reclaimed. Raw embeddings are plain numpy; nothing else needs the encoder.
-    # Only release an encoder we own — an injected one is the caller's to keep.
+    # Free the torch model + its threads before any downstream joblib/XGBoost
+    # stage so in-process threading is clean and memory is reclaimed. Raw
+    # embeddings are plain numpy; nothing else needs the encoder. Only release an
+    # encoder we own — an injected one is the caller's to keep.
     if owns_encoder:
         del encoder
         import gc
@@ -112,7 +112,7 @@ def _cached_raw_embeddings(
 
     cache[key] = raw_embeddings
     while len(cache) > EMBEDDING_CACHE_CAP:
-        cache.pop(next(iter(cache)))  # ponytail: evict oldest
+        cache.pop(next(iter(cache)))  # evict oldest
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(cache, EMBEDDING_CACHE_PATH)
     return raw_embeddings, False
@@ -128,10 +128,10 @@ def build_name_embeddings(
 ) -> tuple[pd.DataFrame, SentenceTransformer | None, PCA]:
     """Encode product names to dense embeddings and reduce them with PCA.
 
-    ponytail: uses sentence-transformers' intfloat/multilingual-e5-base (12-layer
-    XLM-R, 768-dim, MIT/non-gated) — lighter than bge-m3 (278M vs 568M, ~2x faster
-    CPU encode) with strong Thai/English coverage. e5 REQUIRES a "query: " prefix
-    on every input (applied in _cached_raw_embeddings); the raw 768-dim embeddings
+    Uses sentence-transformers' intfloat/multilingual-e5-base (12-layer XLM-R,
+    768-dim, MIT/non-gated) — lighter than bge-m3 (278M vs 568M, ~2x faster CPU
+    encode) with strong Thai/English coverage. e5 REQUIRES a "query: " prefix on
+    every input (applied in _cached_raw_embeddings); the raw 768-dim embeddings
     are reduced to embedding_dim PCA components. If a fitted `pca` is passed
     (predict path), it is used to transform — not refit — so train and predict
     share one PCA basis (fixes a latent basis mismatch and removes the refit
@@ -146,11 +146,11 @@ def build_name_embeddings(
         reduced = pca.transform(raw_embeddings)
         n_components = pca.n_components_
     else:
-        # ponytail: fit-then-transform, NOT fit_transform. With the randomized SVD
-        # solver, fit_transform(X) and fit(X).transform(X) differ by ~0.03 (truncated
-        # SVD), which would silently shift predict-time features vs training-time
-        # features. Using the same transform() code path in training and prediction
-        # makes the two consistent on the same raw embeddings. random_state makes the
+        # fit-then-transform, NOT fit_transform. With the randomized SVD solver,
+        # fit_transform(X) and fit(X).transform(X) differ by ~0.03 (truncated SVD),
+        # which would silently shift predict-time features vs training-time features.
+        # Using the same transform() code path in training and prediction makes the
+        # two consistent on the same raw embeddings. random_state makes the
         # randomized fit reproducible; this basis recovers the original R²≈0.267.
         pca = PCA(
             n_components=embedding_dim,

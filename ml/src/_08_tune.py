@@ -1,13 +1,11 @@
 """Hyperparameter tuning capability for the health & wellness price regression.
 
-ponytail: implements the deferred Summary.md next-steps — tune XGBoost/GBDT
-hyperparameters and add HistGradientBoostingRegressor and RandomForestRegressor
-as candidates, all scored by K-fold CV. This is capability, not deployment: it
-reports CV mean±std and held-out metrics for each candidate and saves the tuned
-winners to models/tuned_*.joblib, but it does NOT overwrite the deployed
-models/xgboost.joblib.
-Promote a winner manually if its held-out R² clearly beats the current XGBoost
-(R²≈0.2676) by more than CLEAR_MARGIN.
+Tunes XGBoost/GBDT hyperparameters and adds HistGradientBoostingRegressor and
+RandomForestRegressor as candidates, all scored by K-fold CV. This is capability,
+not deployment: it reports CV mean±std and held-out metrics for each candidate
+and saves the tuned winners to models/tuned_*.joblib, but it does NOT overwrite
+the deployed models/xgboost.joblib. Promote a winner manually if its held-out R²
+clearly beats the current XGBoost (R²≈0.2676) by more than CLEAR_MARGIN.
 
 n_jobs=1 throughout — torch/sentence-transformer threads + joblib parallelism
 segfault on macOS. The search is slower but safe; the upgrade path is a
@@ -44,8 +42,8 @@ CV_FOLDS = 5
 N_ITER = 20
 CLEAR_MARGIN = 0.01  # held-out R² gain to call a candidate a clear winner
 
-# ponytail: modest param distributions — RandomizedSearchCV samples N_ITER combos
-# from these lists (no scipy needed). Keep ranges sane for a 2k-row, 55-feature table.
+# Modest param distributions — RandomizedSearchCV samples N_ITER combos from
+# these lists (no scipy needed). Keep ranges sane for a 2k-row, 55-feature table.
 XGB_DIST = {
     "n_estimators": [100, 200, 300],
     "max_depth": [3, 4, 5, 6, 7],
@@ -71,8 +69,8 @@ HIST_DIST = {
     "l2_regularization": [0.0, 1.0, 5.0],
 }
 
-# ponytail: RandomForest is a bagging baseline vs the boosting candidates. The
-# 2k-row table rules out deep forests; max_features as a fraction keeps trees cheap.
+# RandomForest is a bagging baseline vs the boosting candidates. The 2k-row
+# table rules out deep forests; max_features as a fraction keeps trees cheap.
 RF_DIST = {
     "n_estimators": [200, 400, 600],
     "max_depth": [None, 8, 16],
@@ -105,9 +103,9 @@ def _search(name, estimator, dist, X_train, y_train):
         cv=cv,
         scoring="neg_mean_squared_error",
         random_state=RANDOM_STATE,
-        # ponytail: n_jobs=1 for the search too — torch/joblib thread clash
-        # segfaults on macOS. Upgrade path: subprocess-isolated search once
-        # embeddings are cached.
+        # n_jobs=1 for the search too — torch/joblib thread clash segfaults on
+        # macOS. Upgrade path: subprocess-isolated search once embeddings are
+        # cached.
         n_jobs=1,
         refit=True,
     )

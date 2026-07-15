@@ -32,10 +32,9 @@ def explain_model(
 ) -> pd.Series:
     """Compute and save SHAP-based interpretation for the GBDT model.
 
-    ponytail: TreeSHAP on the test set gives both global feature importance
-    (mean |SHAP value|) and local explanations (beeswarm). SHAP is installed
-    specifically for tree-based model interpretation; the gradient-boosted
-    trees are small enough that TreeSHAP runs quickly on the 526-row test set.
+    TreeSHAP on the test set gives both global feature importance (mean |SHAP
+    value|) and local explanations (beeswarm). The gradient-boosted trees are
+    small enough that TreeSHAP runs quickly on the 526-row test set.
     """
     model = joblib.load(model_path)
     selected_columns = json.loads(selected_path.read_text())

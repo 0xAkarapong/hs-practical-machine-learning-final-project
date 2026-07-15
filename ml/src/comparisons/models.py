@@ -14,7 +14,7 @@ from sklearn.linear_model import RidgeCV
 from sklearn.model_selection import KFold
 
 from src._02_feature_engineer import OUTPUT_PATH, build_feature_table
-from src._03_split_data import RANDOM_STATE, TARGET_COLUMN
+from src._03_split_data import RANDOM_STATE, TARGET_COLUMN, split_data
 from src.common.metrics import evaluate_model
 
 # src/comparisons/ is one level deeper than the src/ modules -> repo root.
@@ -38,7 +38,7 @@ def _select_features(X_train, y_train) -> list[str]:
         min_features_to_select=10,
         cv=cv,
         scoring="neg_mean_squared_error",
-        # ponytail: n_jobs=1 — consistent with the main pipeline's feature_selection.
+        # n_jobs=1 — consistent with the main pipeline's feature_selection.
         # torch/sentence-transformer threads + joblib parallelism segfault on macOS.
         n_jobs=1,
     )
@@ -46,15 +46,8 @@ def _select_features(X_train, y_train) -> list[str]:
     return X_train.columns[selector.get_support()].tolist()
 
 
-def _split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Reproduce the stratified split from src._03_split_data on any feature table."""
-    from src._03_split_data import split_data
-
-    return split_data(df)
-
-
 def _train_and_eval(feature_table: pd.DataFrame, label: str):
-    train_table, test_table = _split(feature_table)
+    train_table, test_table = split_data(feature_table)
     X_train = train_table.drop(columns=TARGET_COLUMN)
     y_train = train_table[TARGET_COLUMN]
     X_test = test_table.drop(columns=TARGET_COLUMN)
@@ -78,8 +71,8 @@ def _train_and_eval(feature_table: pd.DataFrame, label: str):
 def _plot_comparison(province_metrics, region_metrics, save_path: Path) -> Path:
     """Save a small-multiples comparison of R² and RMSE for the two encodings.
 
-    ponytail: two separate subplots instead of a dual-axis chart — R² and RMSE
-    live on different natural scales, so each gets its own y-axis.
+    Two separate subplots instead of a dual-axis chart — R² and RMSE live on
+    different natural scales, so each gets its own y-axis.
     """
     labels = ["Province-level", "Region-level"]
     r2s = [province_metrics["r2_log"], region_metrics["r2_log"]]
@@ -149,9 +142,9 @@ def _plot_comparison(province_metrics, region_metrics, save_path: Path) -> Path:
 def run_compare() -> dict[str, dict[str, float]]:
     """Train and compare province-level vs region-level models.
 
-    ponytail: this script rebuilds the province-encoded table on the fly by
-    toggling use_region=False in build_feature_table. It exists only for the
-    comparison plot; the main pipeline uses the region-encoded CSV.
+    Rebuilds the province-encoded table on the fly by toggling use_region=False
+    in build_feature_table. It exists only for the comparison plot; the main
+    pipeline uses the region-encoded CSV.
     """
     raw_df = pd.read_csv(RAW_PATH)
     province_table = build_feature_table(raw_df, use_region=False)
