@@ -219,16 +219,19 @@ function Input({
   onChange,
   placeholder,
   type = "text",
+  min,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   type?: string;
+  min?: number;
 }) {
   return (
     <input
       type={type}
       value={value}
+      min={min}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
       className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-zinc-300"
