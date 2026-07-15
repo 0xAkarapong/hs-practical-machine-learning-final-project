@@ -175,7 +175,7 @@ def run_tune() -> dict:
     print("\nTuning XGBoost...")
     xgb_best, xgb_params = _search(
         "tuned_xgb",
-        XGBRegressor(n_jobs=1, random_state=RANDOM_STATE),
+        XGBRegressor(n_jobs=-1, random_state=RANDOM_STATE),
         XGB_DIST,
         X_train,
         y_train,

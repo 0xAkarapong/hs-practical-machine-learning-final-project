@@ -19,11 +19,12 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev --no-cache
 
 # Pre-bake the sentence-transformer model into the image so runtime runs
-# offline / without re-downloading ~1GB each container start. Cache path
+# offline / without re-downloading ~1.1GB each container start. Cache path
 # matches src/common/embeddings.py (~/.cache/sentence_transformers). Needs
-# network at build; drop this RUN to skip baking (then runtime downloads).
+# network at build; intfloat/multilingual-e5-base is non-gated/MIT (no HF_TOKEN).
+# Drop this RUN to skip baking (then runtime downloads).
 RUN python -c "from pathlib import Path; from sentence_transformers import SentenceTransformer; \
-    SentenceTransformer('paraphrase-multilingual-mpnet-base-v2', \
+    SentenceTransformer('intfloat/multilingual-e5-base', \
     cache_folder=str(Path.home() / '.cache' / 'sentence_transformers'))"
 
 # ---- runtime: slim, only the venv + baked model + source ----
@@ -37,8 +38,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && \
 ENV PATH=/app/.venv/bin:$PATH \
     MPLBACKEND=Agg \
     HF_HUB_DISABLE_PROGRESS_BARS=1 \
-    TOKENIZERS_PARALLELISM=false \
-    OMP_NUM_THREADS=1
+    TOKENIZERS_PARALLELISM=false
+    # OMP_NUM_THREADS is intentionally NOT set here: the macOS-only segfault was
+    # torch threads + joblib fork, and joblib stays n_jobs=1 in this image. On
+    # Linux this lets the e5-base encode + XGBoost OMP use all cores (~4x encode).
+    # Override with `docker compose run -e OMP_NUM_THREADS=4 ...` to cap it.
 
 WORKDIR /app
 

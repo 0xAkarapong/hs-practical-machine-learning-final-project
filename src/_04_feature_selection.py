@@ -38,7 +38,7 @@ def select_features(
         n_estimators=100,
         max_depth=3,
         learning_rate=0.1,
-        n_jobs=1,
+        n_jobs=-1,  # in-process threads; safe (torch freed, joblib n_jobs=1 below)
         random_state=seed,
     )
     selector = RFECV(
@@ -46,8 +46,8 @@ def select_features(
         min_features_to_select=min_features,
         cv=cv_splitter,
         scoring="neg_mean_squared_error",
-        # ponytail: n_jobs=1 because torch/sentence-transformers threading plus
-        # RFECV parallelism caused intermittent segfaults on macOS.
+        # ponytail: n_jobs=1 keeps joblib fork-free (the macOS segfault was
+        # fork+torch). The wrapper's own n_jobs=-1 still parallelizes each fit.
         n_jobs=1,
     )
     selector.fit(X_train, y_train)

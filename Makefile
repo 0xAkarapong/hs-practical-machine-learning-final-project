@@ -16,8 +16,18 @@ up:  ## run the full pipeline + predict, stream logs, exit on completion
 train:  ## run only training (main.py) in a fresh container
 	docker compose run --rm pipeline python main.py
 
-predict:  ## run only predict.py (uses trained models in the models volume)
+predict:  ## predict prices for the full cleaned raw table (uses trained models)
 	docker compose run --rm pipeline python predict.py
+
+predict-file:  ## predict a custom CSV in ./dataset: make predict-file FILE=my.csv
+	docker compose run --rm -v "$(CURDIR)/dataset:/app/io" pipeline \
+		python predict.py /app/io/$(FILE) /app/io/$(FILE:.csv=_predictions.csv)
+	@echo "Wrote dataset/$(FILE:.csv=_predictions.csv)"
+
+predict-sample:  ## predict for dataset/sample_input.csv (5 demo rows)
+	docker compose run --rm -v "$(CURDIR)/dataset:/app/io" pipeline \
+		python predict.py /app/io/sample_input.csv /app/io/sample_predictions.csv
+	@echo "Wrote dataset/sample_predictions.csv"
 
 shell:  ## open a shell inside the container (volumes mounted)
 	docker compose run --rm pipeline sh
