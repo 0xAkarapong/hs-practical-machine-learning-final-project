@@ -27,10 +27,13 @@ The product-name encoder has been iterated on (each swap auto-invalidates the em
 |---|---|---:|---:|---|---:|---:|---:|
 | 1 | `paraphrase-multilingual-mpnet-base-v2` | 384 | 32 | none | 52 | 0.4414 | 268.49 |
 | 2 | `BAAI/bge-m3` | 1024 | 32 | none | 52 | 0.4676 | 258.83 |
-| 3 | `intfloat/multilingual-e5-base` (current) | 768 | 64 | `"query: "` | 65 | **0.4789** | **262.19** |
+| 3 | `intfloat/multilingual-e5-base` | 768 | 32 | `"query: "` | 57 | 0.4655 | 261.98 |
+| 4 | `intfloat/multilingual-e5-base` (current / production) | 768 | 64 | `"query: "` | 65 | **0.4789** | **262.19** |
 | — | `airesearch/wangchanberta-base-att-spm-uncased` | 768 | 32 | none | — | abandoned | — |
 
 **Current: `intfloat/multilingual-e5-base`.** Lighter than bge-m3 (278M vs 568M, ~2× faster CPU encode) with strong Thai/English coverage, and expanding the PCA dimension from 32 → 64 retained more name signal. e5 models **require** a `"query: "/"passage: "` prefix on every input; the e5 model card says to use `"query: "` when embeddings are used as features (clustering / linear probing), which is our regression case — applied in the single shared encode path so train + predict stay consistent.
+
+> **Apples-to-apples at PCA 32.** Rows 1–3 compare every encoder at the same PCA dim (32), so the ranking is on encoder quality, not dim. e5-base at 32 (R² 0.4655) already edges out mpnet (0.4414) and sits essentially even with bge-m3 (0.4676) — at half the raw dim of bge-m3 and with the `"query: "` prefix. Row 4 shows e5-base at 64 (production): it retains more PCA directions and 8 more wrapper-kept features (65 vs 57), surfacing high-index directions (`pca_31/40/44/52`) that don't exist at 32. The held-out R² gap between 32 and 64 is small and within XGBoost run-to-run variance (`n_jobs=-1` makes RFECV + final metrics non-deterministic by ~±0.013 R² / ±~10 features), so **production stays at 64** on signal-retention grounds, not a clean measured win. `EMBEDDING_DIM=64` in `src/common/embeddings.py`; env-overridable to `EMBEDDING_DIM=32` for ablations.
 
 **WangchanBERTa was attempted and abandoned.** It is a raw Thai RoBERTa MLM (not a sentence-embedding model) and ships a minimal `sentencepiece.bpe.model` tokenizer with no `tokenizer.json` / `tokenizer_class`. transformers 5.13 cannot auto-instantiate that tokenizer — it routes SentencePiece-BPE through a tiktoken extractor that cannot parse the binary file, and `use_fast=False` is not honored. There is no clean load path without pinning `transformers` to 4.x and/or shipping a custom tokenizer, so it was reverted to e5-base.
 
@@ -78,7 +81,8 @@ The wrapper has been re-run each time the feature space changed. **Wrapper round
 |---:|---|---:|---:|---:|---|
 | 1 | mpnet / 32 | 82 | 73 (82 → 10) | **52** | First switch to the tree wrapper; prior `RidgeCV` wrapper kept 78/82 (barely selective). |
 | 2 | bge-m3 / 32 | 82 | 73 (82 → 10) | **52** | Same pool size (32 PCA) → same kept count; raw dim change did not move the count. |
-| 3 | **e5-base / 64 (current)** | **114** | **105 (114 → 10)** | **65** | PCA dim 32 → 64 widened the pool by 32; RFECV kept 65 (13 more than the 32-dim runs). |
+| 3 | e5-base / 32 | 82 | 73 (82 → 10) | **57** | Same 32-PCA pool as rounds 1–2; e5 kept 5 more than mpnet/bge-m3. |
+| 4 | **e5-base / 64 (current)** | **114** | **105 (114 → 10)** | **65** | PCA dim 32 → 64 widened the pool by 32; RFECV kept 65 (8 more than e5-base/32). |
 
 - **Round 3 (current): kept 65 of 114**, pruned 49. The 768-dim e5 embeddings reduced to 64 PCA components, joined by the ~50 non-embedding features (region/section one-hot, name text stats, `log_total_sold`, review group).
 

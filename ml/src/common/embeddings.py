@@ -29,7 +29,10 @@ MODELS_DIR = PROJECT_ROOT / "models"
 EMBEDDING_CACHE_PATH = MODELS_DIR / "name_embeddings.joblib"
 
 MODEL_NAME = "intfloat/multilingual-e5-base"
-EMBEDDING_DIM = 64
+# ponytail: production uses 64 PCA components. Env-overridable so an encoder
+# ablation can run at another dim (e.g. EMBEDDING_DIM=32) for apples-to-apples
+# comparison in Summary.md without touching this constant — default stays 64.
+EMBEDDING_DIM = int(os.environ.get("EMBEDDING_DIM", "64"))
 # ponytail: e5 models REQUIRE a "query: "/"passage: " input prefix, even non-English.
 # The e5 model card says: "Use 'query: ' prefix if you want to use embeddings as
 # features, such as linear probing classification, clustering." We use the name
