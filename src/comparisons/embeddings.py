@@ -17,7 +17,8 @@ from src._03_split_data import RANDOM_STATE, TARGET_COLUMN, split_data
 from src._04_feature_selection import select_features
 from src.common.metrics import evaluate_model
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/comparisons/ -> repo root
+# src/comparisons/ is one level deeper than the src/ modules -> repo root.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 FEATURE_PATH = PROJECT_ROOT / "dataset" / "health_and_wellness_feature_engineered.csv"
 FEATURE_PATH_NO_EMB = (
     PROJECT_ROOT
