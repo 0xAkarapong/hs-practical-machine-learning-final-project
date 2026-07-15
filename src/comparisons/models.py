@@ -17,7 +17,8 @@ from src._02_feature_engineer import OUTPUT_PATH, build_feature_table
 from src._03_split_data import RANDOM_STATE, TARGET_COLUMN
 from src.common.metrics import evaluate_model
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# src/comparisons/ is one level deeper than the src/ modules -> repo root.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 RAW_PATH = PROJECT_ROOT / "dataset" / "health_and_wellness_no_outliers.csv"
 FIGURES_DIR = PROJECT_ROOT / "notebooks" / "figures"
 

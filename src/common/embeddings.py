@@ -18,7 +18,7 @@ from sklearn.decomposition import PCA
 
 from src._03_split_data import RANDOM_STATE
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/common/ -> repo root
 MODELS_DIR = PROJECT_ROOT / "models"
 EMBEDDING_CACHE_PATH = MODELS_DIR / "name_embeddings.joblib"
 
