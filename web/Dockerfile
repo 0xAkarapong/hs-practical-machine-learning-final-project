@@ -1,4 +1,4 @@
-# ponytail: standard Next.js standalone build. output: "standalone" in next.config.ts
+# Standard Next.js standalone build. output: "standalone" in next.config.ts
 # produces a self-contained server copied into a slim runtime image.
 FROM node:22-alpine AS deps
 WORKDIR /app

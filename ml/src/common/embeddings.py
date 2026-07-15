@@ -113,8 +113,14 @@ def _cached_raw_embeddings(
     cache[key] = raw_embeddings
     while len(cache) > EMBEDDING_CACHE_CAP:
         cache.pop(next(iter(cache)))  # evict oldest
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    joblib.dump(cache, EMBEDDING_CACHE_PATH)
+    # Best-effort persist: the api container mounts models/ read-only, so a cache
+    # miss there can't write back. Skipping is fine — the in-memory encode still
+    # serves this request; only cross-restart reuse is lost on a read-only mount.
+    try:
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        joblib.dump(cache, EMBEDDING_CACHE_PATH)
+    except OSError:
+        pass
     return raw_embeddings, False
 
 
