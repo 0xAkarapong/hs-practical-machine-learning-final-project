@@ -5,8 +5,8 @@ from pathlib import Path
 import joblib
 import pandas as pd
 from sklearn.feature_selection import RFECV
-from sklearn.linear_model import RidgeCV
 from sklearn.model_selection import KFold
+from xgboost import XGBRegressor
 
 from src._03_split_data import RANDOM_STATE, TARGET_COLUMN, TRAIN_PATH
 
@@ -22,21 +22,32 @@ def select_features(
     cv: int = 5,
     seed: int = RANDOM_STATE,
 ) -> list[str]:
-    """Return the column names selected by RFECV with a RidgeCV wrapper.
+    """Return the column names selected by RFECV with a tree-based wrapper.
 
-    ponytail: RidgeCV is the wrapper estimator because it is fast and stable on
-    the one-hot feature table; the final model remains GradientBoostingRegressor.
-    RFECV greedily prunes the least important features and cross-validates the
-    subset size, so the kept set is the one that maximizes the wrapper's CV score.
+    ponytail: the wrapper estimator matches the final model class so the kept
+    subset optimizes what the tree actually cares about (thresholds, interactions)
+    — a linear RidgeCV wrapper kept 78/82 features, i.e. barely selected, because
+    linear models rarely find a one-hot/embedding feature that *hurts* CV MSE. A
+    shallow XGBRegressor (n_estimators=100, max_depth=3) ranks via
+    feature_importances_ and prunes by the tree's own CV-MSE. RFECV's internal CV
+    only touches X_train (no test leakage); the final model is still the full
+    GradientBoostingRegressor / XGBRegressor fit in src/_06_train.py.
     """
     cv_splitter = KFold(n_splits=cv, shuffle=True, random_state=seed)
+    wrapper = XGBRegressor(
+        n_estimators=100,
+        max_depth=3,
+        learning_rate=0.1,
+        n_jobs=1,
+        random_state=seed,
+    )
     selector = RFECV(
-        estimator=RidgeCV(),
+        estimator=wrapper,
         min_features_to_select=min_features,
         cv=cv_splitter,
         scoring="neg_mean_squared_error",
         # ponytail: n_jobs=1 because torch/sentence-transformers threading plus
-        # RFECV parallelism caused intermittent segfaults on macOS with 60 features.
+        # RFECV parallelism caused intermittent segfaults on macOS.
         n_jobs=1,
     )
     selector.fit(X_train, y_train)
