@@ -23,13 +23,16 @@ Standalone (not in `main.py`): `src/eda.py` (ported from `notebooks/01 eda.ipynb
 
 ### Name-embedding + region-level model (current default)
 
+Feature set selected by the **tree-based RFECV wrapper** (52 features; see "What the wrapper cut").
+
 | Step | Model | Features | R² (log) | RMSE (log) | MAE (log) | RMSE (THB) | MAE (THB) |
 |---|---|---:|---:|---:|---:|---:|---:|
 | Baseline | Mean predictor | — | −0.0001 | 0.9727 | 0.7766 | 638.08 | 348.71 |
-| Selected GBDT | GradientBoostingRegressor | 78 | 0.3358 | 0.7927 | 0.6294 | 566.11 | 301.00 |
-| Selected XGBoost | XGBRegressor | **78** | **0.3652** | **0.7749** | **0.6075** | **561.54** | **292.38** |
+| Selected GBDT | GradientBoostingRegressor | 52 | 0.3333 | 0.7942 | 0.6277 | 567.33 | 300.29 |
+| Selected XGBoost (fixed-default) | XGBRegressor | 52 | 0.3721 | 0.7707 | 0.6019 | 563.12 | 291.36 |
+| **Selected XGBoost (tuned, deployed)** | XGBRegressor | **52** | **0.4414** | **0.7270** | **0.5477** | **539.49** | **268.49** |
 
-With the sentence-embedding features, **XGBoost now beats sklearn GradientBoostingRegressor** on the same selected subset. Both models improve substantially over the non-embedding region-level model.
+With the sentence-embedding features, **XGBoost now beats sklearn GradientBoostingRegressor** on the same selected subset. The tuned XGBoost (promoted to `models/xgboost.joblib`) is the deployed model; the fixed-default XGBoost is what `main.py` re-fits on each run.
 
 ### Region-level model without embeddings (previous default)
 
@@ -51,16 +54,12 @@ On the selected 39 region-level features (no embeddings), sklearn GradientBoosti
 
 ## What the wrapper cut
 
-With the region + embedding + text-feature encoding, `RFECV` kept **78 of 82** features. The four dropped features were:
+The wrapper is **`RFECV` with a tree-based estimator** (`XGBRegressor`, `n_estimators=100, max_depth=3`) — not a linear `RidgeCV`. The estimator matches the final model class, so the kept subset optimizes what the tree cares about (thresholds, interactions), not a linear model's CV-MSE. RFECV ranks features by `feature_importances_` and eliminates one per round.
 
-| Dropped feature | Why it was likely cut |
-|---|---|
-| `has_reviews` | Review presence adds almost no price signal once `name_semantic_pca_*`, `name_word_count`, and `log_total_sold` are available. |
-| `log_total_reviews` | Number of reviews is subsumed by `log_total_sold` (sales volume) and the title signals. |
-| `name_length` | Title character count is redundant with `name_word_count` and the semantic embeddings. |
-| `section_Brain_Memory` | A sparse category column with little price signal. |
+- **Rounds:** RFECV scored **73 subset sizes** (82 → 10 features, step 1) and selected the subset maximizing 5-fold CV MSE.
+- **Kept: 52 of 82** features (pruned 30). The previous `RidgeCV` wrapper kept 78/82 — it barely selected, because a linear model rarely finds a one-hot/embedding feature that *hurts* CV MSE. Switching to a tree wrapper made the selection real.
 
-In short, adding `log_total_sold` and the regex name signals let the wrapper drop the entire review group plus the weaker title-length statistic; all 7 new text features were kept.
+The 30 dropped features were the weaker `name_semantic_pca_*` directions, sparse `section_*` categories, and the review group (`has_reviews`, `log_total_reviews`) — all subsumed by `log_total_sold` and the stronger semantic directions. Section, region, and the top semantic directions stay.
 
 ## Does `Shop Location` matter?
 
@@ -190,19 +189,20 @@ uv run python main.py   # train + evaluate + interpret + compare
 uv run python predict.py # generate predictions.csv from the raw table
 ```
 
-Final model: **name-embedding + region-level XGBRegressor** on 78 selected features — the
-tuned XGBoost has been promoted to `models/xgboost.joblib` (n_estimators 300, max_depth 7,
-learning_rate 0.05; the fixed-default model that `main.py` retrained is preserved as
+Final model: **name-embedding + region-level XGBRegressor** on **52 tree-wrapper-selected
+features** — the tuned XGBoost has been promoted to `models/xgboost.joblib` (n_estimators 300,
+max_depth 7, learning_rate 0.05, subsample 0.8, colsample_bytree 0.8, min_child_weight 5,
+reg_lambda 5.0; the fixed-default model that `main.py` retrained is preserved as
 `models/tuned_xgboost.joblib`'s source).
 
 | Metric | Value |
 |---|---:|
-| R² (log) | 0.4354 |
-| RMSE (log) | 0.7309 |
-| MAE (log) | 0.5530 |
-| RMSE (THB) | 539.27 |
-| MAE (THB) | 269.86 |
-| CV R² (log) | 0.4082 ± 0.0322 |
+| R² (log) | 0.4414 |
+| RMSE (log) | 0.7270 |
+| MAE (log) | 0.5477 |
+| RMSE (THB) | 539.49 |
+| MAE (THB) | 268.49 |
+| CV R² (log) | 0.4002 ± 0.0261 |
 
 Prediction script: `predict.py` loads `models/xgboost.joblib` and `models/name_pca.joblib`, transforms a raw listing (`Name`, `Section`, `Shop Location`, `Total Reviews`) the same way as training, and returns predicted THB prices in `dataset/predictions.csv`.
 
@@ -232,25 +232,25 @@ tuning capability with `uv run python -m src.tune`; results are written to `mode
 
 | Candidate | Held R² (log) | Held RMSE (THB) | CV R² (log) |
 |---|---:|---:|---:|
-| Current XGBoost (fixed-default) | 0.3652 | 561.54 | 0.3536 ± 0.0216 |
-| Tuned XGBoost | **0.4354** | 539.27 | 0.4082 ± 0.0322 |
-| Tuned GBDT | 0.4161 | 543.54 | 0.3867 ± 0.0373 |
-| HistGradientBoosting | 0.3986 | 553.23 | 0.3924 ± 0.0332 |
-| RandomForest | 0.3956 | 552.98 | 0.3719 ± 0.0166 |
+| Current XGBoost (fixed-default) | 0.3721 | 563.12 | 0.3512 ± 0.0142 |
+| Tuned XGBoost | **0.4414** | 539.49 | 0.4002 ± 0.0261 |
+| Tuned GBDT | 0.4261 | 539.60 | 0.3885 ± 0.0353 |
+| HistGradientBoosting | 0.4127 | 543.22 | 0.3981 ± 0.0317 |
+| RandomForest | 0.3886 | 554.96 | 0.3721 ± 0.0150 |
 
-Adding the regex name features + parsed `log_total_sold` lifted every model — the fixed-default
-XGBoost went 0.2994 → 0.3652 (+0.066) and the tuned XGBoost 0.3949 → 0.4354 (+0.041). The CV
-estimate also tightened (tuned XGBoost 0.3450 ± 0.0402 → 0.4082 ± 0.0322), so the gain is real
-rather than held-out luck. All four tuned candidates are **clear winners** over the fixed-default
-XGBoost; **tuned XGBoost is the top candidate** on held-out R², with RandomForest a more
-conservative alternative (tightest CV spread ±0.0166).
+Re-tuned against the new **52-feature** tree-wrapper selected set (the previous table was tuned
+against the 78-feature `RidgeCV`-wrapper set). All four tuned candidates are **clear winners**
+over the fixed-default XGBoost (ΔR² > +0.069 for the best); **tuned XGBoost is the top candidate**
+on held-out R² (0.4414) and CV (0.4002 ± 0.0261), with RandomForest the most conservative
+(tightest CV spread ±0.0150). Best tuned XGBoost params: `n_estimators=300, max_depth=7,
+learning_rate=0.05, subsample=0.8, colsample_bytree=0.8, min_child_weight=5, reg_lambda=5.0`.
 
 **Promoted.** The tuned XGBoost has been copied to `models/xgboost.joblib` and verified on the
-held-out test (held R² 0.4354, RMSE(THB) 539.27, CV 0.4082 ± 0.0322) — it is now the deployed
-model. Caveat: `main.py` still retrains the **fixed-default** XGBoost and would overwrite the
-promoted model, so do not re-run `main.py` without re-promoting
+held-out test (held R² 0.4414, MAE(log) 0.5477, RMSE(THB) 539.49, MAE(THB) 268.49, CV 0.4002 ±
+0.0261) — it is now the deployed model. Caveat: `main.py` still retrains the **fixed-default**
+XGBoost and would overwrite the promoted model, so do not re-run `main.py` without re-promoting
 (`cp models/tuned_xgboost.joblib models/xgboost.joblib`). The `n_jobs=1` ceiling makes the RF
-search the slowest stage (~360s); it is the natural candidate for subprocess-isolated
+search the slowest stage (~306s); it is the natural candidate for subprocess-isolated
 parallelism next.
 
 ## What drives the price
