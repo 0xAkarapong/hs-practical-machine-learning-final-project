@@ -1,10 +1,9 @@
 """Shared evaluation metrics, cross-validation, timing, and metrics persistence.
 
-ponytail: hoists the `evaluate` helper copy-pasted across train.py and the four
-compare_*.py scripts into one place, and adds the K-fold CV estimate that
-Summary.md lists as a not-done next step. Metrics are persisted to
-models/metrics.json so runs are comparable across changes — previously numbers
-lived only in stdout and hand-edited Summary.md prose.
+Hoists the `evaluate` helper (once copy-pasted across train.py and the compare
+scripts) into one place, and adds the K-fold CV estimate. Metrics are persisted
+to models/metrics.json so runs are comparable across changes — previously
+numbers lived only in stdout.
 """
 
 import json
@@ -28,10 +27,10 @@ def evaluate_model(
 ) -> dict[str, float]:
     """Return RMSE/MAE/R² in log space and in THB (expm1 of the log target).
 
-    ponytail: report both spaces — the model fits log_price_thb, but THB is
-    the unit the business reads. expm1 inverts the log1p transform applied
-    during feature engineering. include_features lets the compare scripts keep
-    their feature-count annotation in the same dict.
+    Reports both spaces — the model fits log_price_thb, but THB is the unit the
+    business reads. expm1 inverts the log1p transform applied during feature
+    engineering. include_features lets the compare scripts keep their feature-count
+    annotation in the same dict.
     """
     preds_log = model.predict(X_test)
     rmse_log = float(np.sqrt(mean_squared_error(y_test, preds_log)))
@@ -60,9 +59,9 @@ def cross_val_metrics(
 ) -> dict[str, float]:
     """K-fold CV mean±std for R²/RMSE/MAE in log space.
 
-    ponytail: addresses Summary.md "Add K-fold cross-validation" — the single
-    held-out test set (526 rows) gives a high-variance R²; CV quantifies the
-    uncertainty. The estimator is cloned per fold so no warm-start leakage.
+    The single held-out test set (526 rows) gives a high-variance R²; CV
+    quantifies the uncertainty. The estimator is cloned per fold so no warm-start
+    leakage.
     """
     cv = KFold(n_splits=k, shuffle=True, random_state=seed)
     X_arr = X.to_numpy() if hasattr(X, "to_numpy") else np.asarray(X)
@@ -93,18 +92,13 @@ def save_metrics(metrics: dict, path: Path = METRICS_PATH) -> Path:
     return path
 
 
-def load_metrics(path: Path = METRICS_PATH) -> dict:
-    """Load a previously persisted metrics dict."""
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 @contextmanager
 def time_stage(label: str):
     """Print the wall-clock duration of a stage.
 
-    ponytail: no benchmarking framework — time.perf_counter around expensive
-    stages (embedding encode, feature selection, model fit) is enough to see
-    where the pipeline spends time. Use as `with time_stage("fit XGBoost"): ...`.
+    time.perf_counter around expensive stages (embedding encode, feature
+    selection, model fit) is enough to see where the pipeline spends time. Use as
+    `with time_stage("fit XGBoost"): ...`.
     """
     start = time.perf_counter()
     yield

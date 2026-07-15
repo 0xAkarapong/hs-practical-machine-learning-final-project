@@ -27,9 +27,9 @@ def test_train_and_evaluate_produces_finite_metrics():
     expected_keys = {"rmse_log", "mae_log", "r2_log", "rmse_thb", "mae_thb"}
     assert set(metrics) == expected_keys
     assert all(np.isfinite(v) for v in metrics.values())
-    # ponytail: don't assert r2_log >= 0 in isolation — a trivial synthetic
-    # target can fit poorly without signaling a bug; finiteness + the expected
-    # keys are enough to catch a broken pipeline.
+    # Don't assert r2_log >= 0 in isolation — a trivial synthetic target can fit
+    # poorly without signaling a bug; finiteness + the expected keys are enough to
+    # catch a broken pipeline.
 
     baseline = train_baseline(y_train)
     baseline_metrics = evaluate_model(baseline, X_test, y_test)
@@ -40,8 +40,8 @@ def test_train_and_evaluate_produces_finite_metrics():
 
 
 def test_cross_val_metrics_returns_finite_mean_std():
-    # ponytail: self-check that cross_val_metrics gives finite mean±std on a
-    # synthetic linear target — the smallest thing that fails if the CV loop breaks.
+    # Self-check that cross_val_metrics gives finite mean±std on a synthetic
+    # linear target — the smallest thing that fails if the CV loop breaks.
     rng = np.random.default_rng(3)
     X = pd.DataFrame(rng.normal(size=(150, 3)), columns=["a", "b", "c"])
     y = pd.Series(X["a"] * 2.0 + rng.normal(scale=0.1, size=150), name="log_price_thb")

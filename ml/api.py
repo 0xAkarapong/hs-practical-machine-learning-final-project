@@ -1,14 +1,12 @@
 """FastAPI bridge: expose the trained price model to the Next.js frontend.
 
-One file. Loads the fitted PCA + XGBoost model + the sentence encoder ONCE at
-import (warm start), then serves single-listing predictions, model metrics, and
-form metadata. Reuses predict.predict_prices and models/metrics.json — no logic
-duplicated.
+Loads the fitted PCA + XGBoost model + the sentence encoder once at import (warm
+start), then serves single-listing predictions, model metrics, and form metadata.
+Reuses predict.predict_prices and models/metrics.json — no logic duplicated.
 
-ponytail: the resident SentenceTransformer + PCA + model are the one optimization
-that makes per-request single-listing prediction usable (without it, every novel
-name reloads the ~278M encoder). Threading the encoder through build_name_embeddings
-keeps the batch train/predict CLI paths untouched.
+The encoder is held resident so a per-request single listing doesn't reload the
+~278M model; threading it through build_name_embeddings leaves the batch
+train/predict CLI paths untouched.
 """
 
 import json
@@ -92,8 +90,8 @@ def metrics() -> JSONResponse:
 def _meta() -> dict:
     """Unique Section + Shop Location values from the raw cleaned table.
 
-    ponytail: read from the source CSV so the form dropdowns stay correct as the
-    dataset changes, instead of hardcoding a list that drifts. Cached once.
+    Read from the source CSV so the form dropdowns stay correct as the dataset
+    changes, instead of hardcoding a list that drifts. Cached once.
     """
     df = pd.read_csv(RAW_TABLE_PATH)
     return {
@@ -116,8 +114,8 @@ def predict(listing: Listing) -> dict:
 
 
 if __name__ == "__main__":
-    # ponytail: the one runnable self-check. Exercises the real predict path on
-    # dataset/sample_input.csv with the resident encoder; no HTTP client needed.
+    # Self-check: exercise the real predict path on dataset/sample_input.csv with
+    # the resident encoder; no HTTP client needed.
     sample = pd.read_csv(SAMPLE_INPUT_PATH)
     preds = predict_prices(sample, encoder=_ENCODER)
     assert len(preds) == len(sample), (len(preds), len(sample))

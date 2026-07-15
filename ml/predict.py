@@ -31,13 +31,13 @@ def predict_prices(raw_df: pd.DataFrame, encoder: object | None = None) -> pd.Se
     The `Price` column is ignored for prediction; it is only kept because the
     feature-engineering function expects the raw schema.
 
-    ponytail: minimal outcome entry point. Reuses the fitted PCA from
-    models/name_pca.joblib (transform, not refit) so train/predict share one basis,
-    skips the unknown target column, and hits the embedding cache on repeat runs.
-    The feature matrix is reindexed to the exact selected-feature set the model was
-    trained on (absent one-hot columns fill with 0 — correct for one-hot absence).
+    Reuses the fitted PCA from models/name_pca.joblib (transform, not refit) so
+    train and predict share one basis, skips the unknown target column, and hits
+    the embedding cache on repeat runs. The feature matrix is reindexed to the
+    exact selected-feature set the model was trained on (absent one-hot columns
+    fill with 0 — correct for one-hot absence).
 
-    ponytail: `encoder` lets a long-lived caller (api.py) pass a resident
+    `encoder` lets a long-lived caller (api.py) pass a resident
     SentenceTransformer so per-request listings don't reload the model. Default
     None builds + tears down its own (the batch CLI path).
     """

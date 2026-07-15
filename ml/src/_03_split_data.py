@@ -20,10 +20,8 @@ def split_data(
 ):
     """Split rows into train/test, stratified on the target binned into deciles.
 
-    ponytail: numpy-seeded split, not sklearn — sklearn isn't a dep yet; swap to
-    sklearn.model_selection.train_test_split once the modeling step adds it.
-    Stratification on binned log-price keeps the price distribution balanced across
-    splits; raw regression targets can't be stratified directly.
+    Stratification on binned log-price keeps the price distribution balanced
+    across splits; raw regression targets can't be stratified directly.
     """
     rng = np.random.default_rng(seed)
     price_bins = pd.qcut(df[TARGET_COLUMN], q=10, duplicates="drop")

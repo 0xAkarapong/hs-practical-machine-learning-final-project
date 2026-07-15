@@ -39,11 +39,11 @@ def map_to_region(cleaned_province: str) -> str:
 
 
 # --- Text-derived features from Name + cleaned Total Sold ---------------------
-# ponytail: cheap regex signals the sentence embeddings don't fully capture —
-# dosage magnitude, unit/weight presence, authenticity/premium keywords, bundle
-# ("เซต/แถม/PRE-SALE") flags, and Thai/English ratio. RFECV prunes whatever is
-# noise. Also parses the messy `Total Sold` Thai string ("4,819 ชิ้น") that the
-# pipeline never used — corr(log_total_sold, log_price) ≈ -0.22, a real signal.
+# Regex signals the sentence embeddings don't fully capture: dosage magnitude,
+# unit/weight presence, authenticity/premium keywords, bundle ("เซต/แถม/PRE-SALE")
+# flags, and Thai/English ratio. RFECV prunes whatever is noise. Also parses the
+# messy `Total Sold` Thai string ("4,819 ชิ้น") — corr(log_total_sold, log_price)
+# ≈ -0.22, a real signal.
 _DIGIT_TOKEN = re.compile(r"\d[\d,]*")
 _THAI_CHARS = re.compile(r"[฀-๿]")
 _WEIGHT_UNITS = re.compile(r"mg|มก\.?|กรัม|ml|มล\.?", re.IGNORECASE)
@@ -104,16 +104,16 @@ def build_feature_table(
 ) -> pd.DataFrame:
     """Build the modeling table from the cleaned raw table.
 
-    ponytail: mirrors the logic in notebooks/03 feature_engineer.ipynb so the
-    pipeline can be reproduced inside the Docker image (notebooks/ is excluded
-    from the image). The province-level one-hot is replaced by region-level when
-    use_region=True; this reduces sparse 72-column province dummies to ~9
-    region columns while keeping the location signal.
+    Mirrors notebooks/03 feature_engineer.ipynb so the pipeline reproduces inside
+    the Docker image (notebooks/ is excluded from the image). The province-level
+    one-hot is replaced by region-level when use_region=True; this reduces sparse
+    72-column province dummies to ~9 region columns while keeping the location
+    signal.
 
     include_interactions (default False) adds section × name_word_count columns
-    from Summary.md's next-steps — off by default so the deployed feature set is
-    unchanged; turn on for an ablation. embedding_dim makes the PCA component count
-    configurable (default 16); a 32-dim ablation is a one-line change.
+    — off by default so the deployed feature set is unchanged; turn on for an
+    ablation. embedding_dim makes the PCA component count configurable (default
+    64); a 32-dim ablation is a one-line change.
     """
     df = df.copy()
     df["Price"] = pd.to_numeric(df["Price"], errors="coerce")
@@ -173,10 +173,9 @@ def build_feature_table(
 def add_interaction_features(feature_df: pd.DataFrame) -> pd.DataFrame:
     """Add section × name_word_count interaction columns to an engineered table.
 
-    ponytail: the canonical 'section × title length' interaction from Summary.md's
-    next-steps. Builds one column per section dummy (section_<x> * name_word_count)
-    so RFECV can prune if the interactions don't help. Operates on the already-
-    engineered table so no sentence re-encoding is needed.
+    Builds one column per section dummy (section_<x> * name_word_count) so RFECV
+    can prune if the interactions don't help. Operates on the already-engineered
+    table so no sentence re-encoding is needed.
     """
     if "name_word_count" not in feature_df.columns:
         return feature_df
@@ -202,11 +201,11 @@ def build_predict_table(
 
     Reuses a fitted PCA and skips the target column.
 
-    ponytail: predict-time counterpart to build_feature_table. It omits
-    log_price_thb (the target, unknown at predict time) and transforms name
-    embeddings with the already-fitted PCA from models/name_pca.joblib instead of
-    refitting — this fixes the latent train/predict PCA-basis mismatch and removes
-    the refit cost. `Price` is coerced only to satisfy the raw schema; it is unused.
+    Predict-time counterpart to build_feature_table. Omits log_price_thb (the
+    target, unknown at predict time) and transforms name embeddings with the
+    already-fitted PCA from models/name_pca.joblib instead of refitting — this
+    fixes the latent train/predict PCA-basis mismatch and removes the refit cost.
+    `Price` is coerced only to satisfy the raw schema; it is unused.
     """
     df = df.copy()
     df["Price"] = pd.to_numeric(df["Price"], errors="coerce")
