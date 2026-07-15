@@ -13,35 +13,60 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ml
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
-          python-version-file: ".python-version"
+          python-version-file: "ml/.python-version"
           enable-cache: true
       - run: uv sync --frozen --group dev
       - run: uv run ruff check .
 
   format:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ml
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
-          python-version-file: ".python-version"
+          python-version-file: "ml/.python-version"
           enable-cache: true
       - run: uv sync --frozen --group dev
       - run: uv run ruff format --check .
 
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ml
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
-          python-version-file: ".python-version"
+          python-version-file: "ml/.python-version"
           enable-cache: true
       - run: uv sync --frozen --group dev --group notebooks
       - run: uv run pytest
       - name: Execute notebooks (smoke test)
         run: uv run jupyter nbconvert --to notebook --execute --output-dir=/tmp/nbexec --ExecutePreprocessor.timeout=300 notebooks/*.ipynb
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

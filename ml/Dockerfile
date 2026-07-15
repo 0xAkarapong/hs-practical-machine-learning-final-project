@@ -51,7 +51,7 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /root/.cache/sentence_transformers /root/.cache/sentence_transformers
 
 # Copy source + data
-COPY main.py predict.py ./
+COPY main.py predict.py api.py ./
 COPY src ./src
 COPY dataset ./dataset
 

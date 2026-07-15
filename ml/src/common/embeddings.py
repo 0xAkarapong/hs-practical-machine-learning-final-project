@@ -48,7 +48,10 @@ def _names_key(names: pd.Series) -> str:
 
 
 def _cached_raw_embeddings(
-    names: pd.Series, model_name: str, cache_dir: Path
+    names: pd.Series,
+    model_name: str,
+    cache_dir: Path,
+    encoder: SentenceTransformer | None = None,
 ) -> tuple[np.ndarray, bool]:
     """Return (raw_embeddings, cache_hit). Encode only on a cache miss.
 
@@ -56,6 +59,11 @@ def _cached_raw_embeddings(
     main.py / predict.py runs on the same dataset skip the MiniLM encode entirely
     — the dominant cost. Capped at EMBEDDING_CACHE_CAP distinct name-sets (oldest
     evicted first via dict insertion order).
+
+    ponytail: `encoder` lets a long-lived caller (the FastAPI server in api.py)
+    pass in a resident SentenceTransformer so a per-request single listing does
+    not reload the ~278M model each cache miss. Default None builds + tears down
+    its own encoder, so the batch train/predict paths are unchanged.
     """
     # ponytail: include model_name in the cache key so swapping encoders (e.g.
     # MiniLM → mpnet) re-encodes instead of silently reusing the stale raw vectors.
@@ -70,7 +78,11 @@ def _cached_raw_embeddings(
         print(f"  Embedding cache hit (key={key}) — skipping encode")
         return cache[key], True
 
-    encoder = SentenceTransformer(model_name, cache_folder=str(cache_dir))
+    # ponytail: reuse an injected encoder; only construct+teardown a local one
+    # when no encoder is supplied (the batch path).
+    owns_encoder = encoder is None
+    if owns_encoder:
+        encoder = SentenceTransformer(model_name, cache_folder=str(cache_dir))
     # ponytail: e5 needs the "query: " prefix on every input (see E5_PREFIX). For
     # empty names the prefix alone is harmless — encode keeps a fixed dim either way.
     prefixed = [f"{E5_PREFIX}{n}" for n in names.fillna("").tolist()]
@@ -88,10 +100,12 @@ def _cached_raw_embeddings(
     # ponytail: free the torch model + its threads before any downstream
     # joblib/XGBoost stage so in-process threading is clean and memory is
     # reclaimed. Raw embeddings are plain numpy; nothing else needs the encoder.
-    del encoder
-    import gc
+    # Only release an encoder we own — an injected one is the caller's to keep.
+    if owns_encoder:
+        del encoder
+        import gc
 
-    gc.collect()
+        gc.collect()
 
     cache[key] = raw_embeddings
     while len(cache) > EMBEDDING_CACHE_CAP:
@@ -107,6 +121,7 @@ def build_name_embeddings(
     embedding_dim: int = EMBEDDING_DIM,
     cache_dir: Path | None = None,
     pca: PCA | None = None,
+    encoder: SentenceTransformer | None = None,
 ) -> tuple[pd.DataFrame, SentenceTransformer | None, PCA]:
     """Encode product names to dense embeddings and reduce them with PCA.
 
@@ -120,7 +135,9 @@ def build_name_embeddings(
     cost). Otherwise a new PCA is fit and returned (training path).
     """
     cache_dir = cache_dir or Path.home() / ".cache" / "sentence_transformers"
-    raw_embeddings, _ = _cached_raw_embeddings(names, model_name, cache_dir)
+    raw_embeddings, _ = _cached_raw_embeddings(
+        names, model_name, cache_dir, encoder=encoder
+    )
 
     if pca is not None:
         reduced = pca.transform(raw_embeddings)

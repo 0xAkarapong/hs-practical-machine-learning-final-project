@@ -1,6 +1,13 @@
+# Monorepo orchestration: ML pipeline (one-shot train+predict), the FastAPI
+# bridge, and the Next.js frontend. The `api` + `pipeline` services share one
+# image (hs-ml:latest) built from ./ml; `web` is the Next standalone image.
+#
+# First-time use: run `docker compose up pipeline` once to train models into the
+# `models` volume, then `docker compose up api web` to serve. (Re-run `pipeline`
+# whenever ml/ source changes to refresh the persisted models.)
 services:
   pipeline:
-    build: .
+    build: ./ml
     image: hs-ml:latest
     # Train the full pipeline, then predict — one command yields models + predictions.
     command: sh -c "python main.py && python predict.py"
@@ -8,6 +15,29 @@ services:
       - models:/app/models
       - dataset:/app/dataset
       - figures:/app/notebooks/figures
+
+  api:
+    build: ./ml
+    image: hs-ml:latest
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    # Read-only mounts: load persisted models (xgboost + PCA) + the raw table for /meta.
+    # The models volume must be populated by a prior `pipeline` run.
+    volumes:
+      - models:/app/models:ro
+      - dataset:/app/dataset:ro
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped
 
 volumes:
   models:

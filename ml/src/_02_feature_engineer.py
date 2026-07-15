@@ -196,6 +196,7 @@ def build_predict_table(
     pca: object,
     use_region: bool = USE_REGION,
     embedding_dim: int = EMBEDDING_DIM,
+    encoder: object | None = None,
 ) -> pd.DataFrame:
     """Build the feature table for prediction.
 
@@ -222,7 +223,7 @@ def build_predict_table(
     features["log_total_sold"] = np.log1p(df["Total Sold"].apply(_parse_total_sold))
 
     name_embeddings, _, _ = build_name_embeddings(
-        df["Name"], embedding_dim=embedding_dim, pca=pca
+        df["Name"], embedding_dim=embedding_dim, pca=pca, encoder=encoder
     )
     name_text = _name_text_features(df["Name"])
 
