@@ -31,7 +31,7 @@ def test_train_and_evaluate_produces_finite_metrics():
     # poorly without signaling a bug; finiteness + the expected keys are enough to
     # catch a broken pipeline.
 
-    baseline = train_baseline(y_train)
+    baseline = train_baseline(X_train, y_train)
     baseline_metrics = evaluate_model(baseline, X_test, y_test)
     assert all(np.isfinite(v) for v in baseline_metrics.values())
     # The model uses informative features; it must beat the mean-predictor.

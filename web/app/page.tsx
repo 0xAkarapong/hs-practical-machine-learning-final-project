@@ -39,7 +39,6 @@ export default function Home() {
     Section: "Acne Care",
     Name: "DHC Vitamin B-Mix วิตามินบีรวม (สำหรับ 20 วัน)",
     "Total Sold": "0",
-    "Total Reviews": "0",
     "Shop Location": "Bangkok",
   });
   const [price, setPrice] = useState<number | null>(null);
@@ -69,7 +68,7 @@ export default function Home() {
         body: JSON.stringify({
           ...form,
           "Total Sold": Number(form["Total Sold"]) || 0,
-          "Total Reviews": Number(form["Total Reviews"]) || 0,
+          "Total Reviews": 0,
         }),
       });
       if (!res.ok) throw new Error(`API ${res.status}`);
@@ -88,8 +87,8 @@ export default function Home() {
         <h1 className="text-2xl font-semibold tracking-tight">Health &amp; Wellness Price Recommender</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
           Set the <strong>section</strong>, <strong>product name</strong>, and <strong>shop
-          location</strong> — those drive the price. Units sold and reviews are optional; leave
-          them at 0 for a brand-new listing that has no sales history yet.
+          location</strong> — those drive the price. Expected sold is optional; leave
+          it at 0 for a brand-new listing that has no sales history yet.
         </p>
 
         {/* Predictor form */}
@@ -117,22 +116,13 @@ export default function Home() {
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">
               Optional · sales history
             </p>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Units sold" hint="Units already sold; 0 for a new listing">
+            <div className="max-w-xs">
+              <Field label="Expected sold" hint="Expected units to be sold; 0 for a new listing">
                 <Input
                   type="number"
                   min={0}
                   value={form["Total Sold"]}
                   onChange={(v) => setForm({ ...form, "Total Sold": v })}
-                  placeholder="0"
-                />
-              </Field>
-              <Field label="Total reviews" hint="Reviews so far; 0 if none yet">
-                <Input
-                  type="number"
-                  min={0}
-                  value={form["Total Reviews"]}
-                  onChange={(v) => setForm({ ...form, "Total Reviews": v })}
                   placeholder="0"
                 />
               </Field>

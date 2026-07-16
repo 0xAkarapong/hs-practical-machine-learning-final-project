@@ -226,7 +226,7 @@ def run_train() -> dict[str, dict[str, float]]:
     print(f"Loaded: {n_train:,} train rows, {n_test:,} test rows")
 
     print("Fitting baseline (mean-predictor)...")
-    baseline = train_baseline(y_train)
+    baseline = train_baseline(X_train, y_train)
     baseline_metrics = evaluate_model(baseline, X_test, y_test)
     print(
         f"Baseline RMSE (log): {baseline_metrics['rmse_log']:.4f}"
